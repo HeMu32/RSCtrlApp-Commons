@@ -1,0 +1,1 @@
+// Defines an interface for device enumeration.
