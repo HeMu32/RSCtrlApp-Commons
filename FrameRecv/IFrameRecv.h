@@ -1,0 +1,1 @@
+// Defines an interface for frame reception

@@ -1,0 +1,1 @@
+// Defines an interface for controlling a 3-axis servo platform.

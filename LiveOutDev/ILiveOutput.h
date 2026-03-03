@@ -1,0 +1,1 @@
+// Defines an interface for A/V output, inherient from FrameRecv
