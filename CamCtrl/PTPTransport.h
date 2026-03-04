@@ -1,3 +1,5 @@
+// Lite header.
+// Defines a interface for warpping platfrom-specific PTP impl, used by the wrapper implementation.
 #pragma once
 
 #include <cstdint>
@@ -24,7 +26,7 @@ constexpr size_t PTP_MAX_PARAMS = 5;
  */
 
 /**
- * @brief Lightweight escape result used by transport implementations.
+ * @brief lightweight escape result used by transport implementations.
  */
 struct PTP_EscapeResult
 {

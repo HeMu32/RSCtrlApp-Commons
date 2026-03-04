@@ -1,3 +1,5 @@
+// Lite header.
+// Defines a minimal blocking-style camera control interface for non-wide-char usage.
 #pragma once
 
 #include <cstdint>
