@@ -5,9 +5,15 @@
 #if defined(__has_include)
 #if __has_include(<libavutil/frame.h>) && __has_include(<libavutil/pixfmt.h>) && __has_include(<libswscale/swscale.h>)
 #define UNIAVFRAME_HAS_FFMPEG 1
+#if defined(__cplusplus)
+extern "C" {
+#endif
 #include <libavutil/frame.h>
 #include <libavutil/pixfmt.h>
 #include <libswscale/swscale.h>
+#if defined(__cplusplus)
+}
+#endif
 #else
 #define UNIAVFRAME_HAS_FFMPEG 0
 #endif
