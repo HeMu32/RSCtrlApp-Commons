@@ -22,6 +22,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/frame.h>
 #include <libavutil/pixfmt.h>
+#include <libavutil/samplefmt.h>
 #include <libswscale/swscale.h>
 #if defined(__cplusplus)
 }
@@ -1101,7 +1102,7 @@ UniAVError UniAVFrame::buildRGBA8888Cache()
         {
 #if UNIAVFRAME_BMDSDK_PREFER_FFMPEG && UNIAVFRAME_HAS_FFMPEG
 #if defined(AV_PIX_FMT_X2RGB10BE)
-            bSuccess = convertByFFmpegSws(
+            bSuccess = Convert::convertByFFmpegSws(
                 stBuffer.data,
                 iDstStride,
                 static_cast<const std::uint8_t*>(stAccess.pBytes),
@@ -1114,7 +1115,7 @@ UniAVError UniAVFrame::buildRGBA8888Cache()
 
             if (!bSuccess)
             {
-                bSuccess = convertBMDR210ToRGBA(
+                bSuccess = Convert::convertBMDR210ToRGBA(
                     stBuffer.data,
                     iDstStride,
                     static_cast<const std::uint8_t*>(stAccess.pBytes),
@@ -1188,11 +1189,27 @@ std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFrom
         return {nullptr, UniAVError::CacheBuildFailed};
     }
 
+    const bool bIsVideoFrame = (pClonedFrame->width > 0 && pClonedFrame->height > 0);
+    int iAudioChannels = 0;
+    if (pClonedFrame->ch_layout.nb_channels > 0)
+    {
+        iAudioChannels = pClonedFrame->ch_layout.nb_channels;
+    }
+    else if (pClonedFrame->channels > 0)
+    {
+        iAudioChannels = pClonedFrame->channels;
+    }
+
+    const bool bIsAudioFrame = (pClonedFrame->nb_samples > 0 && iAudioChannels > 0);
+    if (!bIsVideoFrame && !bIsAudioFrame)
+    {
+        av_frame_free(&pClonedFrame);
+        return {nullptr, UniAVError::InvalidArgument};
+    }
+
     std::shared_ptr<UniAVFrame> spFrame(new UniAVFrame());
-    spFrame->m_mediaType = MediaType::Video;
     spFrame->m_backend = InputBackend::FFmpeg;
     spFrame->m_timestamp = timestamp;
-    spFrame->m_hasVideo = true;
     spFrame->m_pool = spPool;
 
     spFrame->m_native.backend = InputBackend::FFmpeg;
@@ -1205,17 +1222,76 @@ std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFrom
             av_frame_free(&pFrame);
         });
 
-    spFrame->m_originalMemory.data = pClonedFrame->data[0];
-    if (pClonedFrame->linesize[0] > 0 && pClonedFrame->height > 0)
+    if (bIsVideoFrame)
     {
-        spFrame->m_originalMemory.sizeBytes =
-            static_cast<std::size_t>(pClonedFrame->linesize[0]) * static_cast<std::size_t>(pClonedFrame->height);
+        spFrame->m_mediaType = MediaType::Video;
+        spFrame->m_hasVideo = true;
+
+        spFrame->m_originalMemory.data = pClonedFrame->data[0];
+        if (pClonedFrame->linesize[0] > 0 && pClonedFrame->height > 0)
+        {
+            spFrame->m_originalMemory.sizeBytes =
+                static_cast<std::size_t>(pClonedFrame->linesize[0]) * static_cast<std::size_t>(pClonedFrame->height);
+        }
+
+        const UniAVError emCacheRet = spFrame->buildRGBA8888Cache();
+        if (emCacheRet != UniAVError::Ok)
+        {
+            return {nullptr, emCacheRet};
+        }
+
+        return {spFrame, UniAVError::Ok};
     }
 
-    const UniAVError emCacheRet = spFrame->buildRGBA8888Cache();
-    if (emCacheRet != UniAVError::Ok)
+    spFrame->m_mediaType = MediaType::Audio;
+    spFrame->m_hasAudio = true;
+
+    const AVSampleFormat emSampleFmt = static_cast<AVSampleFormat>(pClonedFrame->format);
+    const int iBytesPerSample = av_get_bytes_per_sample(emSampleFmt);
+    if (iBytesPerSample <= 0)
     {
-        return {nullptr, emCacheRet};
+        return {nullptr, UniAVError::UnsupportedFormat};
+    }
+
+    spFrame->m_audioDesc.sampleRate = pClonedFrame->sample_rate;
+    spFrame->m_audioDesc.channels = iAudioChannels;
+    spFrame->m_audioDesc.bytesPerSample = iBytesPerSample;
+    spFrame->m_audioDesc.sampleCount = pClonedFrame->nb_samples;
+
+    spFrame->m_originalMemory.data = pClonedFrame->data[0];
+    if (pClonedFrame->data[0] != nullptr)
+    {
+        std::size_t nAudioBytes = 0;
+        if (av_sample_fmt_is_planar(emSampleFmt))
+        {
+            if (pClonedFrame->linesize[0] > 0)
+            {
+                nAudioBytes = static_cast<std::size_t>(pClonedFrame->linesize[0]);
+            }
+            else if (pClonedFrame->nb_samples > 0)
+            {
+                nAudioBytes = static_cast<std::size_t>(pClonedFrame->nb_samples) * static_cast<std::size_t>(iBytesPerSample);
+            }
+        }
+        else
+        {
+            const int iPackedBufferSize = av_samples_get_buffer_size(
+                nullptr,
+                iAudioChannels,
+                pClonedFrame->nb_samples,
+                emSampleFmt,
+                1);
+            if (iPackedBufferSize > 0)
+            {
+                nAudioBytes = static_cast<std::size_t>(iPackedBufferSize);
+            }
+            else if (pClonedFrame->linesize[0] > 0)
+            {
+                nAudioBytes = static_cast<std::size_t>(pClonedFrame->linesize[0]);
+            }
+        }
+
+        spFrame->m_originalMemory.sizeBytes = nAudioBytes;
     }
 
     return {spFrame, UniAVError::Ok};

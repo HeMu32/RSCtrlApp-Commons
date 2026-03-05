@@ -41,6 +41,9 @@ enum class UniAVError
 
 struct FrameTimestamp
 {
+    // Optional metadata carrier only.
+    // For audio frames this timestamp may be independent from video timeline,
+    // and UniAVFrame does not perform A/V alignment.
     std::int64_t frameTime = 0;
     std::int64_t frameDuration = 0;
     std::int64_t timeScale = 0;
@@ -56,6 +59,8 @@ struct VideoDesc
 
 struct AudioDesc
 {
+    // Metadata for the current audio frame payload.
+    // sampleCount is per-frame sample count, not a timeline-aligned value.
     std::int32_t sampleRate = 0;
     std::int32_t channels = 0;
     std::int32_t bytesPerSample = 0;

@@ -40,6 +40,11 @@ namespace UniAV
  * 原始字节仅在 `buildRGBA8888Cache()` 内通过 StartAccess/EndAccess 短暂访问，符合 SDK 规约。
  * 后续扩展其他输入后端时，应遵循同样的生命周期接管原则。
  *
+ * ### 4. 不在 UniAVFrame 内实现音视频对齐
+ * UniAVFrame 是数据载体，不承担 A/V 对齐、重采样、重切帧、编码器帧尺寸适配等职责。
+ * 无论输入后端是 BMD（音频节奏常与采集链路关联）还是 FFmpeg/AAC（常见音视频帧边界错开），
+ * 本层仅保留原始帧与元数据；回放端/编码端应自行完成时间线对齐和音频切片。
+ *
  * @note `originalMemory().data` 对 BMDSDK 后端返回 `nullptr`，因为 SDK 不保证
  *       EndAccess 后字节指针仍然有效。像素内容已完整保存于 RGBA 缓存中。
  *       若后续需要访问原始位深数据，应扩展独立的 nativePixelView() 接口配合池化缓冲区。
@@ -70,6 +75,7 @@ public:
 	 *       EndAccess() 后字节指针有效，存储该指针不安全。
 	 *       像素内容已通过 rgbaCacheView() / rgbaCacheRef() 提供。
 	 *       对于 FFmpeg、Qt、OpenCV 后端，`data` 的有效期与 UniAVFrame 生命周期一致。
+	 *       该接口仅提供帧内数据视图，不提供跨音视频流的对齐语义。
 	 */
 	MemoryView originalMemory() const;
 	RGBAImageView rgbaCacheView() const;
