@@ -29,6 +29,23 @@ enum class PixelFormat
     RGBA8888
 };
 
+enum class AudioSampleFormat
+{
+    Unknown = 0,
+    U8,
+    S16,
+    S32,
+    F32,
+    F64
+};
+
+enum class AudioSampleLayout
+{
+    Unknown = 0,
+    Interleaved,
+    Planar
+};
+
 enum class UniAVError
 {
     Ok = 0,
@@ -41,6 +58,9 @@ enum class UniAVError
 
 struct FrameTimestamp
 {
+    // Optional metadata carrier only.
+    // For audio frames this timestamp may be independent from video timeline,
+    // and UniAVFrame does not perform A/V alignment.
     std::int64_t frameTime = 0;
     std::int64_t frameDuration = 0;
     std::int64_t timeScale = 0;
@@ -56,10 +76,27 @@ struct VideoDesc
 
 struct AudioDesc
 {
+    // Metadata for the current audio frame payload.
+    // sampleCount is per-frame sample count, not a timeline-aligned value.
     std::int32_t sampleRate = 0;
     std::int32_t channels = 0;
     std::int32_t bytesPerSample = 0;
     std::int32_t sampleCount = 0;
+    AudioSampleFormat sampleFormat = AudioSampleFormat::Unknown;
+    AudioSampleLayout sampleLayout = AudioSampleLayout::Unknown;
+};
+
+// May pay attention to byte order when ported to other platforms. 
+struct BMDAudioPacketDesc
+{
+    // Expected BMD capture sample rate, e.g. 48000.
+    std::int32_t sampleRate = 0;
+    // Channel count configured in EnableAudioInput.
+    std::int32_t channels = 0;
+    // BMD sample bit width. Current valid values: 16, 32.
+    std::int32_t sampleTypeBits = 0;
+    // Time scale for GetPacketTime. Set <=0 to skip packet-time query.
+    std::int64_t packetTimeScale = 0;
 };
 
 struct MemoryView
