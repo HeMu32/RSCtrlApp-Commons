@@ -45,9 +45,10 @@ namespace UniAV
  * 无论输入后端是 BMD（音频节奏常与采集链路关联）还是 FFmpeg/AAC（常见音视频帧边界错开），
  * 本层仅保留原始帧与元数据；回放端/编码端应自行完成时间线对齐和音频切片。
  *
- * @note `originalMemory().data` 对 BMDSDK 后端返回 `nullptr`，因为 SDK 不保证
+ * @note BMDSDK 视频帧路径下，`originalMemory().data` 返回 `nullptr`，因为 SDK 不保证
  *       EndAccess 后字节指针仍然有效。像素内容已完整保存于 RGBA 缓存中。
- *       若后续需要访问原始位深数据，应扩展独立的 nativePixelView() 接口配合池化缓冲区。
+ *       BMDSDK 音频包路径下，`originalMemory().data` 指向 `IDeckLinkAudioInputPacket::GetBytes()` 返回的包内存，
+ *       有效期由 UniAVFrame 持有的 native 对象生命周期保证。
  */
 class UniAVFrame final
 {
@@ -71,9 +72,9 @@ public:
 
 	/**
 	 * @brief 返回原始输入帧的内存视图（非拥有指针）。
-	 * @note 对于 BMDSDK 后端，`data` 始终为 `nullptr`：BMD SDK 不承诺
-	 *       EndAccess() 后字节指针有效，存储该指针不安全。
+	 * @note 对于 BMDSDK 视频帧，`data` 为 `nullptr`：BMD SDK 不承诺 EndAccess() 后字节指针有效。
 	 *       像素内容已通过 rgbaCacheView() / rgbaCacheRef() 提供。
+	 *       对于 BMDSDK 音频包，`data` 指向包字节内存，生命周期由 UniAVFrame 内部 AddRef/Release 保护。
 	 *       对于 FFmpeg、Qt、OpenCV 后端，`data` 的有效期与 UniAVFrame 生命周期一致。
 	 *       该接口仅提供帧内数据视图，不提供跨音视频流的对齐语义。
 	 */
@@ -129,6 +130,23 @@ public:
 		std::shared_ptr<IUniAVFramePool> pool,
 		const UniAVFrameCreateOptions& options);
 
+	/**
+	 * @brief 从 Qt WebCam/麦克风链路提取的 PCM 音频数据创建 UniAVFrame。
+	 * @param audioData PCM 连续字节缓冲区（通常来自 QAudioBuffer::constData()）。
+	 * @param sizeBytes 缓冲区字节数。
+	 * @param audioDesc 音频描述（采样率、声道、位宽、样本数、格式/布局）。
+	 * @param timestamp 外部时间戳元数据。
+	 * @param pool 帧池参数（为接口一致性保留）。
+	 * @param options 创建选项；本接口总是进行安全拷贝以适配回调内存生命周期。
+	 */
+	static std::pair<std::shared_ptr<UniAVFrame>, UniAVError> createFromQtAudioPCM(
+		void* audioData,
+		std::size_t sizeBytes,
+		const AudioDesc& audioDesc,
+		const FrameTimestamp& timestamp,
+		std::shared_ptr<IUniAVFramePool> pool,
+		const UniAVFrameCreateOptions& options);
+
 	static std::pair<std::shared_ptr<UniAVFrame>, UniAVError> createFromOpenCV(
 		void* cvMat,
 		const FrameTimestamp& timestamp,
@@ -137,6 +155,21 @@ public:
 
 	static std::pair<std::shared_ptr<UniAVFrame>, UniAVError> createFromBMDSDK(
 		void* bmdVideoFrame,
+		const FrameTimestamp& timestamp,
+		std::shared_ptr<IUniAVFramePool> pool,
+		const UniAVFrameCreateOptions& options);
+
+	/**
+	 * @brief 从 BMD 音频输入包创建 UniAVFrame（音频）。
+	 * @param bmdAudioPacket IDeckLinkAudioInputPacket*（作为 void* 传入）。
+	 * @param audioPacketDesc BMD 音频配置描述（采样率、位宽、声道、包时间刻度）。
+	 * @param timestamp 外部时间戳元数据；若 packetTimeScale 有效且可读，frameTime 将被包时间覆盖。
+	 * @param pool 帧池（音频路径当前不分配 RGBA 缓冲，保留参数用于接口一致性）。
+	 * @param options 创建选项。
+	 */
+	static std::pair<std::shared_ptr<UniAVFrame>, UniAVError> createFromBMDSDKAudioPacket(
+		void* bmdAudioPacket,
+		const BMDAudioPacketDesc& audioPacketDesc,
 		const FrameTimestamp& timestamp,
 		std::shared_ptr<IUniAVFramePool> pool,
 		const UniAVFrameCreateOptions& options);

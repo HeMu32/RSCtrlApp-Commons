@@ -1,6 +1,6 @@
 # ADR-002: UniAVFrame 的 BMD 与 FFmpeg 帧交换策略
 
-- 状态: Proposed
+- 状态: Accepted
 - 日期: 2026-03-05
 
 ## 背景
@@ -81,6 +81,14 @@
    - 增加 `createFromBMDSDKAudioPacket`
    - 以 BMD 输入参数填充 `AudioDesc`，存储 `GetBytes` 的线性内存视图
    - 时间戳通过 `GetPacketTime` 填入 `FrameTimestamp`
+
+### 当前落地状态（2026-03-05）
+
+- Phase 1 已落地：
+   - `UniAVFrameTypes` 增加音频格式/布局枚举与 `BMDAudioPacketDesc`
+   - `UniAVFrameFactory` 增加 `createFromBMDSDKAudioPacket`
+   - `UniAVFrameFactory` 增加 `createFromQtAudioPCM`（适配 Qt WebCam/麦克风回调的 PCM 缓冲）
+   - FFmpeg 音频入口补齐 `sampleFormat` 与 `sampleLayout` 元数据
 
 2. Phase 2（交换增强）
    - 增加 UniAV↔FFmpeg 音频桥接 helper（仅封装，不做重采样）

@@ -80,6 +80,54 @@ extern "C" {
 namespace UniAV
 {
 
+#if UNIAVFRAME_HAS_FFMPEG
+static AudioSampleFormat mapFFmpegSampleFormat(AVSampleFormat emSampleFmt)
+{
+    switch (emSampleFmt)
+    {
+    case AV_SAMPLE_FMT_U8:
+    case AV_SAMPLE_FMT_U8P:
+        return AudioSampleFormat::U8;
+    case AV_SAMPLE_FMT_S16:
+    case AV_SAMPLE_FMT_S16P:
+        return AudioSampleFormat::S16;
+    case AV_SAMPLE_FMT_S32:
+    case AV_SAMPLE_FMT_S32P:
+        return AudioSampleFormat::S32;
+    case AV_SAMPLE_FMT_FLT:
+    case AV_SAMPLE_FMT_FLTP:
+        return AudioSampleFormat::F32;
+    case AV_SAMPLE_FMT_DBL:
+    case AV_SAMPLE_FMT_DBLP:
+        return AudioSampleFormat::F64;
+    default:
+        break;
+    }
+
+    return AudioSampleFormat::Unknown;
+}
+
+static AudioSampleLayout mapFFmpegSampleLayout(AVSampleFormat emSampleFmt)
+{
+    return av_sample_fmt_is_planar(emSampleFmt) ? AudioSampleLayout::Planar : AudioSampleLayout::Interleaved;
+}
+#endif
+
+static AudioSampleFormat mapBMDSampleFormat(std::int32_t iSampleTypeBits)
+{
+    if (iSampleTypeBits == 16)
+    {
+        return AudioSampleFormat::S16;
+    }
+
+    if (iSampleTypeBits == 32)
+    {
+        return AudioSampleFormat::S32;
+    }
+
+    return AudioSampleFormat::Unknown;
+}
+
 
 static bool copyPackedRows(
     std::uint8_t* pDst,
@@ -1087,16 +1135,13 @@ UniAVError UniAVFrame::buildRGBA8888Cache()
         }
         else if (emFmt == bmdFormat10BitYUVA)
         {
-            if (!bSuccess)
-            {
-                bSuccess = Convert::convertBMDAy10ToRGBA(
-                    stBuffer.data,
-                    iDstStride,
-                    static_cast<const std::uint8_t*>(stAccess.pBytes),
-                    iSrcStride,
-                    iWidth,
-                    iHeight);
-            }
+            bSuccess = Convert::convertBMDAy10ToRGBA(
+                stBuffer.data,
+                iDstStride,
+                static_cast<const std::uint8_t*>(stAccess.pBytes),
+                iSrcStride,
+                iWidth,
+                iHeight);
         }
         else if (emFmt == bmdFormat10BitRGB)
         {
@@ -1195,10 +1240,6 @@ std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFrom
     {
         iAudioChannels = pClonedFrame->ch_layout.nb_channels;
     }
-    else if (pClonedFrame->channels > 0)
-    {
-        iAudioChannels = pClonedFrame->channels;
-    }
 
     const bool bIsAudioFrame = (pClonedFrame->nb_samples > 0 && iAudioChannels > 0);
     if (!bIsVideoFrame && !bIsAudioFrame)
@@ -1257,6 +1298,15 @@ std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFrom
     spFrame->m_audioDesc.channels = iAudioChannels;
     spFrame->m_audioDesc.bytesPerSample = iBytesPerSample;
     spFrame->m_audioDesc.sampleCount = pClonedFrame->nb_samples;
+    spFrame->m_audioDesc.sampleFormat = mapFFmpegSampleFormat(emSampleFmt);
+    spFrame->m_audioDesc.sampleLayout = mapFFmpegSampleLayout(emSampleFmt);
+
+    if (spFrame->m_timestamp.timeScale > 0 && pClonedFrame->sample_rate > 0)
+    {
+        spFrame->m_timestamp.frameDuration =
+            (static_cast<std::int64_t>(pClonedFrame->nb_samples) * spFrame->m_timestamp.timeScale) /
+            static_cast<std::int64_t>(pClonedFrame->sample_rate);
+    }
 
     spFrame->m_originalMemory.data = pClonedFrame->data[0];
     if (pClonedFrame->data[0] != nullptr)
@@ -1369,6 +1419,101 @@ std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFrom
     (void)options;
     return {nullptr, UniAVError::UnsupportedFormat};
 #endif
+}
+
+std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFromQtAudioPCM(
+    void* audioData,
+    std::size_t sizeBytes,
+    const AudioDesc& audioDesc,
+    const FrameTimestamp& timestamp,
+    std::shared_ptr<IUniAVFramePool> pool,
+    const UniAVFrameCreateOptions& options)
+{
+    (void)options;
+
+    if (audioData == nullptr || sizeBytes == 0)
+    {
+        return {nullptr, UniAVError::InvalidArgument};
+    }
+
+    if (audioDesc.sampleRate <= 0 ||
+        audioDesc.channels <= 0 ||
+        audioDesc.bytesPerSample <= 0 ||
+        audioDesc.sampleCount <= 0 ||
+        audioDesc.sampleFormat == AudioSampleFormat::Unknown)
+    {
+        return {nullptr, UniAVError::InvalidArgument};
+    }
+
+    const AudioSampleLayout emLayout =
+        (audioDesc.sampleLayout == AudioSampleLayout::Unknown) ? AudioSampleLayout::Interleaved : audioDesc.sampleLayout;
+
+    std::size_t nMinBytes = 0;
+    if (emLayout == AudioSampleLayout::Interleaved)
+    {
+        nMinBytes =
+            static_cast<std::size_t>(audioDesc.sampleCount) *
+            static_cast<std::size_t>(audioDesc.channels) *
+            static_cast<std::size_t>(audioDesc.bytesPerSample);
+    }
+    else
+    {
+        // Planar 布局：每个声道是独立连续段，总字节数 = sampleCount * bytesPerSample * channels
+        nMinBytes =
+            static_cast<std::size_t>(audioDesc.sampleCount) *
+            static_cast<std::size_t>(audioDesc.bytesPerSample) *
+            static_cast<std::size_t>(audioDesc.channels);
+    }
+
+    if (nMinBytes == 0 || nMinBytes > sizeBytes)
+    {
+        return {nullptr, UniAVError::InvalidArgument};
+    }
+
+    std::uint8_t* pOwnedBytes = new (std::nothrow) std::uint8_t[sizeBytes];
+    if (pOwnedBytes == nullptr)
+    {
+        return {nullptr, UniAVError::PoolAllocationFailed};
+    }
+
+    std::memcpy(pOwnedBytes, audioData, sizeBytes);
+
+    std::shared_ptr<IUniAVFramePool> spPool = pool;
+    if (!spPool)
+    {
+        spPool = std::make_shared<UniAVFramePool>();
+    }
+
+    std::shared_ptr<UniAVFrame> spFrame(new UniAVFrame());
+    spFrame->m_mediaType = MediaType::Audio;
+    spFrame->m_backend = InputBackend::Qt;
+    spFrame->m_timestamp = timestamp;
+    spFrame->m_hasAudio = true;
+    spFrame->m_pool = spPool;
+
+    spFrame->m_native.backend = InputBackend::Qt;
+    spFrame->m_native.nativePtr = pOwnedBytes;
+    spFrame->m_nativeOwner = std::shared_ptr<void>(
+        pOwnedBytes,
+        [](void* pObj)
+        {
+            delete[] static_cast<std::uint8_t*>(pObj);
+        });
+
+    spFrame->m_audioDesc = audioDesc;
+    spFrame->m_audioDesc.sampleLayout = emLayout;
+
+    spFrame->m_originalMemory.data = pOwnedBytes;
+    spFrame->m_originalMemory.sizeBytes = sizeBytes;
+
+    if (spFrame->m_timestamp.timeScale > 0 && spFrame->m_timestamp.frameDuration == 0)
+    {
+        spFrame->m_timestamp.frameDuration =
+            (static_cast<std::int64_t>(audioDesc.sampleCount) * spFrame->m_timestamp.timeScale) /
+            static_cast<std::int64_t>(audioDesc.sampleRate);
+    }
+
+    return {spFrame, UniAVError::Ok};
 }
 
 std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFromOpenCV(
@@ -1496,6 +1641,121 @@ std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFrom
     return {spFrame, UniAVError::Ok};
 #else
     (void)bmdVideoFrame;
+    (void)timestamp;
+    (void)pool;
+    (void)options;
+    return {nullptr, UniAVError::UnsupportedFormat};
+#endif
+}
+
+std::pair<std::shared_ptr<UniAVFrame>, UniAVError> UniAVFrameFactory::createFromBMDSDKAudioPacket(
+    void* bmdAudioPacket,
+    const BMDAudioPacketDesc& audioPacketDesc,
+    const FrameTimestamp& timestamp,
+    std::shared_ptr<IUniAVFramePool> pool,
+    const UniAVFrameCreateOptions& options)
+{
+#if UNIAVFRAME_HAS_BMDSDK
+    (void)options;
+
+    IDeckLinkAudioInputPacket* pInputPacket = static_cast<IDeckLinkAudioInputPacket*>(bmdAudioPacket);
+    if (pInputPacket == nullptr)
+    {
+        return {nullptr, UniAVError::InvalidArgument};
+    }
+
+    if (audioPacketDesc.sampleRate <= 0 ||
+        audioPacketDesc.channels <= 0 ||
+        (audioPacketDesc.sampleTypeBits != 16 && audioPacketDesc.sampleTypeBits != 32))
+    {
+        return {nullptr, UniAVError::InvalidArgument};
+    }
+
+    pInputPacket->AddRef();
+
+    std::shared_ptr<IUniAVFramePool> spPool = pool;
+    if (!spPool)
+    {
+        spPool = std::make_shared<UniAVFramePool>();
+    }
+
+    std::shared_ptr<UniAVFrame> spFrame(new UniAVFrame());
+    spFrame->m_mediaType = MediaType::Audio;
+    spFrame->m_backend = InputBackend::BMDSDK;
+    spFrame->m_timestamp = timestamp;
+    spFrame->m_hasAudio = true;
+    spFrame->m_pool = spPool;
+
+    spFrame->m_native.backend = InputBackend::BMDSDK;
+    spFrame->m_native.nativePtr = pInputPacket;
+    spFrame->m_nativeOwner = std::shared_ptr<void>(
+        pInputPacket,
+        [](void* pObj)
+        {
+            IDeckLinkAudioInputPacket* pPacket = static_cast<IDeckLinkAudioInputPacket*>(pObj);
+            pPacket->Release();
+        });
+
+    BMDTimeValue iPacketTime = 0;
+    if (audioPacketDesc.packetTimeScale > 0)
+    {
+        if (pInputPacket->GetPacketTime(&iPacketTime, static_cast<BMDTimeScale>(audioPacketDesc.packetTimeScale)) == S_OK)
+        {
+            spFrame->m_timestamp.frameTime = static_cast<std::int64_t>(iPacketTime);
+            spFrame->m_timestamp.timeScale = audioPacketDesc.packetTimeScale;
+        }
+    }
+
+    const long iSampleFrameCount = pInputPacket->GetSampleFrameCount();
+    if (iSampleFrameCount <= 0)
+    {
+        return {nullptr, UniAVError::InvalidArgument};
+    }
+
+    if (iSampleFrameCount > static_cast<long>(std::numeric_limits<std::int32_t>::max()))
+    {
+        return {nullptr, UniAVError::UnsupportedFormat};
+    }
+
+    void* pAudioBytes = nullptr;
+    if (pInputPacket->GetBytes(&pAudioBytes) != S_OK || pAudioBytes == nullptr)
+    {
+        return {nullptr, UniAVError::InvalidArgument};
+    }
+
+    const std::int32_t iBytesPerSample = audioPacketDesc.sampleTypeBits / 8;
+    const AudioSampleFormat emSampleFormat = mapBMDSampleFormat(audioPacketDesc.sampleTypeBits);
+    if (emSampleFormat == AudioSampleFormat::Unknown)
+    {
+        return {nullptr, UniAVError::UnsupportedFormat};
+    }
+
+    const std::size_t nPayloadBytes =
+        static_cast<std::size_t>(iSampleFrameCount) *
+        static_cast<std::size_t>(audioPacketDesc.channels) *
+        static_cast<std::size_t>(iBytesPerSample);
+
+    spFrame->m_audioDesc.sampleRate = audioPacketDesc.sampleRate;
+    spFrame->m_audioDesc.channels = audioPacketDesc.channels;
+    spFrame->m_audioDesc.bytesPerSample = iBytesPerSample;
+    spFrame->m_audioDesc.sampleCount = static_cast<std::int32_t>(iSampleFrameCount);
+    spFrame->m_audioDesc.sampleFormat = emSampleFormat;
+    spFrame->m_audioDesc.sampleLayout = AudioSampleLayout::Interleaved;
+
+    spFrame->m_originalMemory.data = static_cast<std::uint8_t*>(pAudioBytes);
+    spFrame->m_originalMemory.sizeBytes = nPayloadBytes;
+
+    if (spFrame->m_timestamp.timeScale > 0)
+    {
+        spFrame->m_timestamp.frameDuration =
+            (static_cast<std::int64_t>(iSampleFrameCount) * spFrame->m_timestamp.timeScale) /
+            static_cast<std::int64_t>(audioPacketDesc.sampleRate);
+    }
+
+    return {spFrame, UniAVError::Ok};
+#else
+    (void)bmdAudioPacket;
+    (void)audioPacketDesc;
     (void)timestamp;
     (void)pool;
     (void)options;
