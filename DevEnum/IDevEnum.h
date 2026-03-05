@@ -49,7 +49,14 @@ public:
 
 	/**
 	 * @brief 刷新设备快照。
-	 * @return true 表示刷新成功。
+	 *
+	 * **返回值语义**：
+	 * - `true`：后端可用，扫描操作本身成功完成（即使发现零个设备也返回 true）。
+	 *   是否真正找到设备应通过 `ListDevices().empty()` 判断。
+	 * - `false`：后端不可用（例如驱动未安装、SDK 初始化失败），
+	 *   此时 ListDevices() 将返回空列表。
+	 *
+	 * @return true 扫描成功；false 后端不可用。
 	 */
 	virtual bool Refresh() = 0;
 

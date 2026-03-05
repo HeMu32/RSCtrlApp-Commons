@@ -118,6 +118,31 @@ struct TLiveInputCallbacks
 
 /**
  * @brief 统一回调驱动采集模板接口。
+ *
+ * ### 状态机
+ * @code
+ *  Idle ──Open()──> Opening ──成功──> Idle
+ *                          └─失败──> Idle  (fnOnError 触发)
+ *  Idle ──Start()─> Opening ──成功──> Streaming
+ *                          └─失败──> Idle  (fnOnError 触发)
+ *  Streaming ──Stop()──> Stopping ──> Idle
+ *  任意状态 ──Close()──> Idle
+ * @endcode
+ *
+ * ### 错误码约定
+ * - 调用时设备状态不满足前置条件（非 Idle）：返回 `DeviceBusy`。
+ * - 参数本身非法（如空句柄、无效索引）：返回 `InvalidArgument`。
+ * - 设备不存在或已断开：返回 `DeviceNotFound` / `DeviceDisconnected`。
+ * - 后端 SDK / 驱动调用失败：返回 `BackendFailure`。
+ * - 格式/模式不受支持：返回 `UnsupportedMode`。
+ * - 非致命子组件启动失败（例如仅音频失败、视频继续）：
+ *   不中止主流程，但须通过 `fnOnError` 通知调用方，并降级继续。
+ *
+ * ### 线程安全
+ * - `State()`、`Stats()`、`DeviceName()` 可在任意线程调用。
+ * - `fnOnFrame`、`fnOnState`、`fnOnError` 可能在后端内部线程中被调用，
+ *   调用方须自行保证回调内部的线程安全。
+ *
  * @tparam TFrame 输出帧类型。
  * @tparam TNativeId 设备底层唯一标识类型。
  * @tparam TBackendConfig 后端配置类型。
@@ -129,42 +154,77 @@ public:
 	virtual ~ILiveInputT() = default;
 
 	/**
-	 * @brief 注册回调。应在 Open() 前调用。
+	 * @brief 注册回调集合。
+	 *
+	 * **前置条件**：State() == Idle。
+	 * **若已处于 Streaming 或 Stopping**：立即返回 false，不修改已注册的回调。
+	 * 调用方应在 Open() 之前完成回调注册，以确保 Open() 期间的状态/错误通知
+	 * 能够被正确接收。
+	 *
+	 * @return true 注册成功；false 当前状态不允许修改回调。
 	 */
 	virtual bool SetCallbacks(const TLiveInputCallbacks<TFrame>& stCallbacks) = 0;
 
 	/**
-	 * @brief 打开设备，进入可启动状态。
+	 * @brief 打开设备，完成参数验证和资源预分配，进入可 Start() 的状态。
+	 *
+	 * **前置条件**：State() == Idle。
+	 * **状态流转**：Idle → Opening → Idle（成功 或 失败后均回 Idle）。
+	 * **错误通知**：失败时触发 fnOnError（若已注册），同时返回对应错误码。
+	 * **成功后**：State() == Idle，可立即调用 Start()。
+	 * **失败后**：State() == Idle，内部资源已全部清理，可重新调用 Open()。
+	 *
+	 * @return Ok / DeviceBusy / DeviceNotFound / InvalidArgument /
+	 *         UnsupportedMode / BackendFailure
 	 */
 	virtual ELiveInputErrorCode Open(const TLiveInputOpenParams<TNativeId, TBackendConfig>& stParams) = 0;
 
 	/**
-	 * @brief 关闭设备并释放资源。
+	 * @brief 停止采集（若正在进行）并释放全部设备资源，State() 回到 Idle。
+	 *
+	 * **可在任意状态下调用**，包括 Idle（此时为空操作）。
+	 * Close() 内部优先调用 Stop() 再释放资源，保证采集线程安全退出。
+	 * Close() 之后可再次调用 Open() 重新打开设备。
 	 */
 	virtual void Close() = 0;
 
 	/**
-	 * @brief 启动采集。
+	 * @brief 启动硬件采集，开始通过 fnOnFrame 分发帧。
+	 *
+	 * **前置条件**：State() == Idle（即已成功调用过 Open()）。
+	 * **状态流转**：Idle → Opening → Streaming（成功）
+	 *             或 Idle → Opening → Idle（失败，fnOnError 触发）。
+	 * **非致命子组件失败**（例如音频启动失败、视频正常）：
+	 *   实现必须通过 fnOnError 通知调用方，但继续进入 Streaming 状态，
+	 *   不得以此为由返回失败或停止视频采集。
+	 * **若 State() != Idle**：立即返回 DeviceBusy，不改变状态。
+	 *
+	 * @return Ok / DeviceBusy / BackendFailure / UnsupportedMode / InternalError
 	 */
 	virtual ELiveInputErrorCode Start() = 0;
 
 	/**
-	 * @brief 停止采集。
+	 * @brief 停止硬件采集，保留已 Open() 的设备资源。
+	 *
+	 * **若 State() 不为 Streaming 或 Opening**：立即返回（空操作）。
+	 * **状态流转**：Streaming → Stopping → Idle。
+	 * Stop() 后可再次调用 Start() 而无需重新 Open()。
 	 */
 	virtual void Stop() = 0;
 
 	/**
-	 * @brief 查询当前运行状态。
+	 * @brief 查询当前运行状态（线程安全）。
 	 */
 	virtual ELiveInputState State() const = 0;
 
 	/**
-	 * @brief 查询当前统计信息。
+	 * @brief 查询当前统计信息（线程安全）。
 	 */
 	virtual TLiveInputStats Stats() const = 0;
 
 	/**
-	 * @brief 获取当前设备描述名（用于日志和 UI）。
+	 * @brief 获取当前设备描述名，用于日志和 UI（线程安全）。
+	 * @return Open() 成功后的设备名称；Open() 前为空字符串。
 	 */
 	virtual std::string DeviceName() const = 0;
 };
