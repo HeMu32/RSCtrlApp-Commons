@@ -2,6 +2,7 @@
 #include "QtPreviewOutput.h"
 
 #include <QMetaObject>
+#include <QElapsedTimer>
 #include <QImage>
 #include <QPainter>
 #include <QVBoxLayout>
@@ -17,8 +18,11 @@ class FrameCanvas : public QWidget
 public:
     explicit FrameCanvas(QWidget* pParent = nullptr)
         : QWidget(pParent)
+        , m_nIntervalMs(-1)
+        , m_nLastCallMs(-1)
     {
         setMinimumSize(1, 1);
+        m_elapsedTimer.start();
     }
 
     /**
@@ -31,12 +35,20 @@ public:
         // 两者在同一主线程内顺序赋值，paintEvent 不会在中间插入，无竞态。
         m_spPaintFrame = spFrame;
         m_imgView      = imgView;
+
+        // 计算与上一次 setFrame 调用的时间间隔（ms）
+        const qint64 nNow = m_elapsedTimer.elapsed();
+        if (m_nLastCallMs >= 0)
+            m_nIntervalMs = nNow - m_nLastCallMs;
+        m_nLastCallMs = nNow;
     }
 
     void clearFrame()
     {
         m_spPaintFrame.reset();
-        m_imgView = QImage{};
+        m_imgView     = QImage{};
+        m_nIntervalMs = -1;
+        m_nLastCallMs = -1;
     }
 
 protected:
@@ -55,11 +67,44 @@ protected:
         const int   nY       = (szWidget.height() - szScaled.height()) / 2;
 
         p.drawImage(QRect(nX, nY, szScaled.width(), szScaled.height()), m_imgView);
+
+        // ---- 左上角叠加信息文字 ----------------------------------------
+        // 两行英文，黑色描边 + 白色填充，确保在任意背景下均可读。
+        const QString sLine1 = QString("Size: %1 x %2")
+                                   .arg(m_imgView.width())
+                                   .arg(m_imgView.height());
+        const QString sLine2 = (m_nIntervalMs >= 0)
+                                   ? QString("Interval: %1 ms").arg(m_nIntervalMs)
+                                   : QStringLiteral("Interval: --");
+
+        const int     nMargin   = 6;
+        const int     nLineH    = p.fontMetrics().height();
+        const QPoint  ptLine1(nMargin, nMargin + nLineH);
+        const QPoint  ptLine2(nMargin, nMargin + nLineH * 2 + 2);
+
+        // 描边（黑色，偏移 2 像素）
+        p.setPen(Qt::black);
+        for (int dx = -2; dx <= 2; ++dx)
+        {
+            for (int dy = -2; dy <= 2; ++dy)
+            {
+                if (dx == 0 && dy == 0) continue;
+                p.drawText(ptLine1 + QPoint(dx, dy), sLine1);
+                p.drawText(ptLine2 + QPoint(dx, dy), sLine2);
+            }
+        }
+        // 填充（白色）
+        p.setPen(Qt::white);
+        p.drawText(ptLine1, sLine1);
+        p.drawText(ptLine2, sLine2);
     }
 
 private:
     TFrameRecvFramePtr m_spPaintFrame;  ///< 保活 UniAVFrame RGBA 缓存
     QImage             m_imgView;       ///< 非拥有视图，生命周期由 m_spPaintFrame 保证
+    QElapsedTimer      m_elapsedTimer;  ///< 自构造起持续计时
+    qint64             m_nIntervalMs;   ///< 最近两次 setFrame 的时间间隔，-1 表示尚无数据
+    qint64             m_nLastCallMs;   ///< 上次 setFrame 时的 elapsed 值
 };
 
 // -----------------------------------------------------------------------
@@ -225,6 +270,15 @@ void QtPreviewOutput::onUpdateDisplay()
         return;
 
     // ---- 首帧自动 resize（SetVideoFormat 未指定尺寸时）-----------------
+    // ---- 首帧自动 resize（或尺寸不规律的输入）------------------------
+    //
+    // 若调用方未通过 SetVideoFormat 固定格式（m_bFormatSet == false），
+    // 每次收到帧都会将窗口调整为该帧的实际尺寸。这样窗口会跟随
+    // 帧大小“跳动”，适用于想让预览精确匹配输入的场景；但若帧尺寸
+    // 不规律（例如随机变化），窗口会不停地 resize，界面可能显得
+    // 抖动。若 SetVideoFormat 预先设置了宽高，resize 调用会被跳过，
+    // 此后窗口保持固定大小，FrameCanvas 会在 paintEvent 中按比例缩放
+    // 不同尺寸的帧。
     if (!m_bFormatSet || m_stFormat.nWidth <= 0 || m_stFormat.nHeight <= 0)
         m_pWindow->resize(stView.width, stView.height);
 
