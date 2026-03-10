@@ -89,8 +89,9 @@ struct TGimbalDevCallbacks
     std::function<void(EGimbalDevError eError, const std::string& sMsg)> fnError;
 
     /**
-     * @brief   对焦电机自动标定完成回调（可选）
-     *          由 CmdFocusMotorAutoCal() 触发，标定流程结束时由实现层调用。
+     * @brief   对焦电机自动标定通知回调（可选）
+     *          由 CmdFocusMotorAutoCal() 触发。对于不提供完成状态回报的设备，
+     *          实现层可按 best-effort 策略在"命令成功发送"时触发该回调。
      */
     std::function<void()> fnFocusMotorCalComplete;
 };
@@ -156,6 +157,10 @@ public:
      * @param   nTimeMs 运动时间，单位：毫秒
      *
      * @note    若已设置角度限位，实现层在发送指令前自动裁剪到限位范围内。
+     * @note    实现层还应在用户限位裁剪之后强制执行设备协议硬范围裁剪，
+     *          以防止超出硬件支持极限（如 DJI RS 系列：
+     *          Yaw [-1800,+1800]，Roll [-300,+300]，Pitch [-560,+1460]，单位 0.1°）。
+     * @note    nTimeMs 应裁剪至协议可表达范围（如 DJI RS 系列 [100, 25500] ms）。
      * @note    设备未连接时实现层应静默忽略或通过 fnError 通知，不抛出异常。
      */
     virtual void CmdMoveTo(
@@ -170,6 +175,8 @@ public:
      * @param   nY      垂直方向增量（映射至俯仰轴）
      *
      * @note    若已设置限位且当前位置已到达边界，超出方向的分量由实现层清零。
+     * @note    实现层可对调用频率进行节流（如 DJI RS 系列建议最小间隔 50ms），
+     *          以防止 CAN 总线过载或设备异常；超出节流的调用应被静默丢弃。
      */
     virtual void CmdJoystickMove(int16_t nX, int16_t nY) = 0;
 
@@ -180,13 +187,28 @@ public:
      */
     virtual void CmdQueryPosition() = 0;
 
+    /**
+     * @brief           启动或停止内部自动位置轮询
+     * @param   bEnable true=启动轮询，false=停止轮询
+     *
+     * @note    本方法为 **可选实现**，不支持自动轮询的实现可不覆盖，默认为空操作。
+     * @note    自动轮询启用时，实现层以固定内部周期主动查询设备位置并触发
+     *          TGimbalDevCallbacks::fnPositionUpdate 回调；
+     *          停用后仅响应 CmdQueryPosition() 的显式调用。
+     */
+    virtual void SetAutoPollPosition(bool /*bEnable*/) {}
+
     // --------------------------------------------------------
     //  对焦电机指令（fire-and-forget）
     // --------------------------------------------------------
 
     /**
-     * @brief   触发对焦电机自动标定流程
-     *          标定完成后调用 TGimbalDevCallbacks::fnFocusMotorCalComplete（如已设置）。
+     * @brief   触发**跟焦电机**自动限位标定流程（协议 CmdSet=0x0E CmdID=0x12）
+     *
+     * @note    本方法触发的是"跟焦电机自动标定（focus motor auto calibration）"，
+     *          而非"云台自动校准（gimbal auto calibration, CmdID=0x0F）"，两者不同。
+     * @note    回调 TGimbalDevCallbacks::fnFocusMotorCalComplete 的触发语义由实现层定义，
+     *          对于无完成状态回报的设备可采用 best-effort（命令发送成功即触发）。
      */
     virtual void CmdFocusMotorAutoCal() = 0;
 
@@ -204,6 +226,40 @@ public:
      *                  实现层须在内部维护当前位置并累加速度进行绝对位置的推算和下发。
      */
     virtual void CmdFocusMotorMoveRel(int16_t nSpeed) = 0;
+
+    /**
+     * @brief           添加或更新焦距-电机位置标定点
+     * @param   uiFocalMm   焦距（毫米）
+     * @param   uiMotorPos  跟焦电机位置（0~4095）
+     */
+    virtual void AddFocalCalPoint(uint16_t uiFocalMm, uint16_t uiMotorPos) = 0;
+
+    /**
+     * @brief           根据电机位置估算焦距（毫米）
+     * @param   uiMotorPos  跟焦电机位置（0~4095）
+     * @return          估算焦距；失败返回负值
+     *
+     * @note            焦距数据源存在潜在冲突：
+     *                  1) 本方法基于“跟焦电机位置-焦距标定数据”进行插值估算；
+     *                  2) 当系统同时接入相机控制链路时，相机状态上报可能给出另一份焦距值。
+     *                  具体采用哪一路数据由上层聚合对象决策，本接口不做仲裁。
+     */
+    virtual int GetFocalLenFromMotorPos(uint16_t uiMotorPos) const = 0;
+
+    /**
+     * @brief   清除全部焦距标定数据
+     */
+    virtual void ClearFocalCalData() = 0;
+
+    /**
+     * @brief   将焦距标定数据持久化到文件
+     */
+    virtual void SaveFocalCalToFile() = 0;
+
+    /**
+     * @brief   从文件加载焦距标定数据
+     */
+    virtual void LoadFocalCalFromFile() = 0;
 
     // --------------------------------------------------------
     //  角度限位配置
