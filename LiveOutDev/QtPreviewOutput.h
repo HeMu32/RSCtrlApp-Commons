@@ -1,4 +1,5 @@
 // Scaffold for ILiveOutput implementation.
+// Providing an example of using UniAVFrame in Qt for displaying.
 // A concrete ILiveOutput implementation that previews frames in a Qt window.
 // Frames can be pushed from any thread; display is marshalled to the Qt main
 // thread via QueuedConnection -- no Refresh() loop required from the caller.
