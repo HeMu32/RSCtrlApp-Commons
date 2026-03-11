@@ -119,11 +119,15 @@ public:
     // --------------------------------------------------------
 
     /**
-     * @brief       建立连接并注册回调
+     * @brief       建立连接并注册回调（异步）
      * @param       nDevIndex   CAN 盒设备索引（从 0 起）
      * @param       nCanIndex   CAN 通道索引（从 0 起）
      * @param       callbacks   回调结构体，按需填充
-     * @return      EGimbalDevError::Ok 表示连接成功
+     * @return      EGimbalDevError::Ok 表示连接流程已启动（异步）；
+     *              真正连通以 fnStateChanged(Connected) 为准。
+     *              EGimbalDevError::AlreadyOpen 若当前已处于
+     *              Connected / Connecting / Error 状态。
+     *              Error 状态须先调用 Close() 再 Open()。
      */
     virtual EGimbalDevError Open(
         int                         nDevIndex,
@@ -144,6 +148,17 @@ public:
      * @brief   返回完整的设备状态枚举
      */
     virtual EGimbalDevState GetState() const = 0;
+
+    /**
+     * @brief   返回用于向用户展示的设备友好名称字符串
+     *
+     * 典型返回值示例：
+     *  - "DJI RS 3 Pro (CAN #0) [Serial]"
+     *
+     * @note    实现层应尽可能返回可读的型号与通道信息。
+     *          在设备尚未连接时，允许返回基于配置信息的静态名称（如 "DJI Ronin [未连接]"）。
+     */
+    virtual std::string GetDeviceName() const = 0;
 
     // --------------------------------------------------------
     //  运动指令（fire-and-forget）
