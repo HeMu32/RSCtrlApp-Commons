@@ -142,6 +142,8 @@ struct TLiveInputCallbacks
  * - `State()`、`Stats()`、`DeviceName()` 可在任意线程调用。
  * - `fnOnFrame`、`fnOnState`、`fnOnError` 可能在后端内部线程中被调用，
  *   调用方须自行保证回调内部的线程安全。
+ * 
+ * @todo add device friendly name string getter.
  *
  * @tparam TFrame 输出帧类型。
  * @tparam TNativeId 设备底层唯一标识类型。

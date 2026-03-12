@@ -11,6 +11,8 @@
  * Implementations provide a synchronous (blocking) API for basic camera control
  * operations and a small, numeric status snapshot. Designed to be used from
  * single-threaded callers or protected externally by the caller.
+ * 
+ * @todo add device friendly name string getter.
  */
 class ISimpleCamCtrl
 {

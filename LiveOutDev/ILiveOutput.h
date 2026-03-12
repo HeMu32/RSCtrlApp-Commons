@@ -65,6 +65,8 @@ enum class ELiveOutputState : std::uint8_t
  * ## 格式配置
  * `SetVideoFormat()` 与 `Open()` 解耦，允许先配置格式再打开，也允许打开后重新协商。
  * 不关心格式的实现应返回 `ELiveOutputError::UnsupportedFormat`（非致命）。
+ * 
+ * @todo add device friendly name string getter.
  *
  * @note 该接口为 Heavy 接口，直接依赖 IFrameRecv（进而依赖 UniAVFrame 语义）。
  */

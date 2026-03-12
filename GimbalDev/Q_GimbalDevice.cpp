@@ -1,3 +1,4 @@
+// Deprecation. 
 /**
  * @file    Q_GimbalDevice.cpp
  * @brief   IGimbalDev Qt Shim 实现（placeholder）

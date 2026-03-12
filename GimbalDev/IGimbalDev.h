@@ -2,6 +2,7 @@
  * @file    IGimbalDev.h
  * @brief   三轴云台设备抽象接口（ADR-006）
  *          轻依赖型头文件. Lite header.
+ * @todo add device friendly name string getter.
  *
  * 设计原则：
  *  - 接口头文件本身不依赖 Qt 或任何具体 SDK。

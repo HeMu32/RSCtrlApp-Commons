@@ -1,3 +1,4 @@
+// Deprecation.
 /**
  * @file    Q_GimbalDevice.h
  * @brief   IGimbalDev 的 Qt Shim 层
