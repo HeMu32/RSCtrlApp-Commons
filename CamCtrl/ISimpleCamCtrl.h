@@ -18,12 +18,12 @@ class ISimpleCamCtrl
 {
 public:
 	/**
-	 * @brief Raw exposure parameters (values are raw PTP codes).
+	 * @brief Exposure parameters in physical values.
 	 */
 	struct ExposureParams
 	{
-		std::uint32_t shutter_speed = 0; /**< Raw PTP value for shutter speed */
-		std::uint16_t f_number = 0;		 /**< Raw PTP value for aperture (f-number) */
+		double shutter_speed = 0.0; /**< Reciprocal shutter speed in 1/sec (e.g. 60 means 1/60 sec) */
+		double f_number = 0.0;		 /**< Aperture value (e.g. 2.8 for F2.8) */
 		std::uint32_t iso = 0;			 /**< Raw PTP value for ISO */
 		std::int32_t exposure_comp = 0;	 /**< Raw PTP value for exposure compensation */
 	};
@@ -112,7 +112,7 @@ public:
 	virtual bool MovieRecEnd() = 0;
 
 	/**
-	 * @brief Change exposure parameters with raw PTP values.
+	 * @brief Change exposure parameters using physical values.
 	 * @param params Desired exposure parameters; implementations may apply a subset
 	 * of fields depending on device support. Any fields outside the exposure
 	 * parameters in the struct are ignored.
