@@ -149,8 +149,33 @@ struct TLiveInputCallbacks
  * @tparam TNativeId 设备底层唯一标识类型。
  * @tparam TBackendConfig 后端配置类型。
  */
+/**
+ * @brief 默认帧类型（重型依赖）：统一使用 UniAVFrame。
+ */
+using TLiveInputFramePtr = std::shared_ptr<UniAV::UniAVFrame>;
+
+/**
+ * @brief 非模板基础输入接口。
+ *
+ * 该接口允许在不关心具体后端配置类型的情况下对输入对象进行统一管理。
+ * 例如 `LocalPTZCam` 仅需要注册回调、查询状态等，因此使用该基类实现类型擦除。
+ */
+class ILiveInputBase
+{
+public:
+    virtual ~ILiveInputBase() = default;
+
+    virtual bool SetCallbacks(const TLiveInputCallbacks<TLiveInputFramePtr>& stCallbacks) = 0;
+    virtual void Close() = 0;
+    virtual ELiveInputErrorCode Start() = 0;
+    virtual void Stop() = 0;
+    virtual ELiveInputState State() const = 0;
+    virtual TLiveInputStats Stats() const = 0;
+    virtual std::string DeviceName() const = 0;
+};
+
 template <typename TFrame, typename TNativeId, typename TBackendConfig>
-class ILiveInputT
+class ILiveInputT : public ILiveInputBase
 {
 public:
 	virtual ~ILiveInputT() = default;
@@ -230,11 +255,6 @@ public:
 	 */
 	virtual std::string DeviceName() const = 0;
 };
-
-/**
- * @brief 默认帧类型（重型依赖）：统一使用 UniAVFrame。
- */
-using TLiveInputFramePtr = std::shared_ptr<UniAV::UniAVFrame>;
 
 /**
  * @brief 统一默认设备 ID 类型。

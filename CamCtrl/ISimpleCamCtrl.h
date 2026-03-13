@@ -65,6 +65,11 @@ public:
 	 *
 	 * Implementations should refresh their internal snapshot so subsequent
 	 * getters return up-to-date values.
+	 *
+	 * @note Exposure parameters are cache-based and are not refreshed
+	 *       automatically in background. Callers must call UpdateStatus()
+	 *       explicitly before reading exposure getters when fresh values are
+	 *       required.
 	 * @return true on success.
 	 */
 	virtual bool UpdateStatus() = 0;
@@ -72,6 +77,9 @@ public:
 	/**
 	 * @brief Get last-updated exposure parameters.
 	 * @param out_params Output parameter that will be filled with the last known values.
+	 * @note This API returns cached values from the last successful
+	 *       UpdateStatus() call. Without UpdateStatus(), returned values may be
+	 *       stale.
 	 * @return true if valid parameters are available (e.g., after successful UpdateStatus()).
 	 */
 	virtual bool GetExposureParams(ExposureParams &out_params) const = 0;
