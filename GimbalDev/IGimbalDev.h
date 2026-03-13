@@ -106,9 +106,10 @@ struct TGimbalDevCallbacks
  *
  * 使用流程：
  *  1. 构造具体实现（如 DJIRoninDev）并设置回调：Open(devIdx, canIdx, callbacks)
- *  2. 发送运动指令：CmdMoveTo / CmdJoystickMove
- *  3. 通过 fnPositionUpdate 回调接收位置更新
- *  4. 完成后调用 Close() 断开连接
+ *  2. 若接收对象发生变化，可在运行期调用 SetCallbacks() 动态重绑回调
+ *  3. 发送运动指令：CmdMoveTo / CmdJoystickMove
+ *  4. 通过 fnPositionUpdate 回调接收位置更新
+ *  5. 完成后调用 Close() 断开连接
  */
 class IGimbalDev
 {
@@ -134,6 +135,16 @@ public:
         int                         nDevIndex,
         int                         nCanIndex,
         const TGimbalDevCallbacks&  callbacks) = 0;
+
+    /**
+     * @brief   更新回调集合（支持运行期动态重绑）
+     * @param   callbacks   新的回调结构体，按需填充
+     *
+     * @note    该方法可在已连接状态下调用，用于将回调接管给新的接收对象；
+     *          默认约定为原子替换整个回调结构体。
+     * @note    在未连接状态下调用时，建议实现层仅更新内部缓存，待后续回调触发时生效。
+     */
+    virtual void SetCallbacks(const TGimbalDevCallbacks& callbacks) = 0;
 
     /**
      * @brief   断开连接，释放资源。幂等：重复调用无副作用。
