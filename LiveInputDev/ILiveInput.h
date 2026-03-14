@@ -126,6 +126,8 @@ struct TLiveInputCallbacks
  *  Idle ──Start()─> Opening ──成功──> Streaming
  *                          └─失败──> Idle  (fnOnError 触发)
  *  Streaming ──Stop()──> Stopping ──> Idle
+ *  任意状态 ──发生致命错误──> Error
+ *  Error ──Close()──> Idle
  *  任意状态 ──Close()──> Idle
  * @endcode
  *

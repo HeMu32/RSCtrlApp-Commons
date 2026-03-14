@@ -109,7 +109,7 @@ private:
     TFrameRecvFramePtr     m_spLastFrame;    ///< 最新帧（任意线程写，主线程读）
     std::atomic<bool>      m_bUpdatePending; ///< 防止 invokeMethod 堆积
 
-    ELiveOutputState       m_eState;         ///< 当前输出端状态
+    std::atomic<ELiveOutputState> m_eState;  ///< 当前输出端状态
     TLiveOutputVideoFormat m_stFormat;       ///< 已配置的视频格式
     bool                   m_bFormatSet;     ///< SetVideoFormat 是否已调用过
 

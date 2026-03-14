@@ -131,7 +131,7 @@ QtPreviewOutput::~QtPreviewOutput()
 
 ELiveOutputError QtPreviewOutput::Open(const std::string& sConfig)
 {
-    if (m_eState == ELiveOutputState::Open)
+    if (m_eState.load() == ELiveOutputState::Open)
         return ELiveOutputError::AlreadyOpen;
 
     // ---- 创建窗口与画布控件 ---------------------------------------------
@@ -154,13 +154,13 @@ ELiveOutputError QtPreviewOutput::Open(const std::string& sConfig)
             this, [this]() { onWindowDestroyed(); });
 
     m_pWindow->show();
-    m_eState = ELiveOutputState::Open;
+    m_eState.store(ELiveOutputState::Open);
     return ELiveOutputError::Ok;
 }
 
 void QtPreviewOutput::Close()
 {
-    if (m_eState == ELiveOutputState::Idle)
+    if (m_eState.load() == ELiveOutputState::Idle)
         return;
 
     if (m_pWindow)
@@ -180,17 +180,17 @@ void QtPreviewOutput::Close()
         m_spLastFrame.reset();
     }
 
-    m_eState = ELiveOutputState::Idle;
+    m_eState.store(ELiveOutputState::Idle);
 }
 
 bool QtPreviewOutput::IsOpen() const
 {
-    return m_eState == ELiveOutputState::Open;
+    return m_eState.load() == ELiveOutputState::Open;
 }
 
 ELiveOutputState QtPreviewOutput::GetState() const
 {
-    return m_eState;
+    return m_eState.load();
 }
 
 ELiveOutputError QtPreviewOutput::SetVideoFormat(const TLiveOutputVideoFormat& stFormat)
@@ -224,7 +224,7 @@ bool QtPreviewOutput::GetVideoFormat(TLiveOutputVideoFormat& stFormat) const
 void QtPreviewOutput::ReceiveFrame(const TFrameRecvFramePtr& spFrame)
 {
     // 状态防御与 nullptr 防御
-    if (!spFrame || m_eState != ELiveOutputState::Open)
+    if (!spFrame || m_eState.load() != ELiveOutputState::Open)
         return;
 
     // 仅处理视频帧
@@ -315,5 +315,5 @@ void QtPreviewOutput::onWindowDestroyed()
         m_spLastFrame.reset();
     }
 
-    m_eState = ELiveOutputState::Idle;
+    m_eState.store(ELiveOutputState::Idle);
 }
