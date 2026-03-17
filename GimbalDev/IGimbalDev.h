@@ -8,7 +8,6 @@
  *  - 接口头文件本身不依赖 Qt 或任何具体 SDK。
  *  - 所有异步数据（位置、状态、错误）通过 TGimbalDevCallbacks 回调推送。
  *  - 指令方法均为 fire-and-forget（void 返回），不阻塞调用线程。
- *  - FocalLengthHandler 不纳入本接口，由具体实现类按需持有（见 ADR-006）。
  */
 
 #ifndef IGIMBALDEV_H
@@ -254,39 +253,6 @@ public:
      */
     virtual void CmdFocusMotorMoveRel(int16_t nSpeed) = 0;
 
-    /**
-     * @brief           添加或更新焦距-电机位置标定点
-     * @param   uiFocalMm   焦距（毫米）
-     * @param   uiMotorPos  跟焦电机位置（0~4095）
-     */
-    virtual void AddFocalCalPoint(uint16_t uiFocalMm, uint16_t uiMotorPos) = 0;
-
-    /**
-     * @brief           根据电机位置估算焦距（毫米）
-     * @param   uiMotorPos  跟焦电机位置（0~4095）
-     * @return          估算焦距；失败返回负值
-     *
-     * @note            焦距数据源存在潜在冲突：
-     *                  1) 本方法基于“跟焦电机位置-焦距标定数据”进行插值估算；
-     *                  2) 当系统同时接入相机控制链路时，相机状态上报可能给出另一份焦距值。
-     *                  具体采用哪一路数据由上层聚合对象决策，本接口不做仲裁。
-     */
-    virtual int GetFocalLenFromMotorPos(uint16_t uiMotorPos) const = 0;
-
-    /**
-     * @brief   清除全部焦距标定数据
-     */
-    virtual void ClearFocalCalData() = 0;
-
-    /**
-     * @brief   将焦距标定数据持久化到文件
-     */
-    virtual void SaveFocalCalToFile() = 0;
-
-    /**
-     * @brief   从文件加载焦距标定数据
-     */
-    virtual void LoadFocalCalFromFile() = 0;
 
     // --------------------------------------------------------
     //  角度限位配置

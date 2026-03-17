@@ -7,13 +7,6 @@ FocalLengthHandler::FocalLengthHandler()
     loadCalibrationsFromFile();
 }
 
-FocalLengthHandler::~FocalLengthHandler()
-{
-    // 析构函数
-    // 在析构函数中保存校准数据
-    // saveCalibrationsToFile();
-}
-
 int FocalLengthHandler::set_FocalLen_to_FocusMotoPos(uint16_t uiFocal, uint16_t uiPos)
 {
     if (uiPos > 4095)
@@ -70,7 +63,7 @@ int FocalLengthHandler::set_FocalLen_to_FocusMotoPos(uint16_t uiFocal, uint16_t 
     return -1;
 }
 
-int FocalLengthHandler::get_FocalLen_from_FocusMotorPos(uint16_t uiPos)
+int FocalLengthHandler::get_FocalLen_from_FocusMotorPos(uint16_t uiPos) const
 {
     if (uiPos > 4095)
         return -1;
@@ -81,10 +74,10 @@ int FocalLengthHandler::get_FocalLen_from_FocusMotorPos(uint16_t uiPos)
     if (vecMotorCalPoints.empty())
         return -1;
         
-    std::pair<int16_t, int16_t> *pLarger    = NULL;     // the closest larger  (or equal) one in records
-    std::pair<int16_t, int16_t> *pSmaller   = NULL;     // the closest smaller (or equal) one in records
+    const std::pair<int16_t, int16_t> *pLarger    = NULL;     // the closest larger  (or equal) one in records
+    const std::pair<int16_t, int16_t> *pSmaller   = NULL;     // the closest smaller (or equal) one in records
     
-    for (std::pair<int16_t, int16_t> &item : vecMotorCalPoints)
+    for (const std::pair<int16_t, int16_t> &item : vecMotorCalPoints)
     {
         if (item.second >= uiPos)
         {   // 找到大于等于输入值的记录
@@ -164,7 +157,7 @@ std::vector<std::pair<int16_t, int16_t>> FocalLengthHandler::get_FocusMotorCalDa
     return ret;
 }
 
-std::pair<float, float> FocalLengthHandler::get_Crop_and_Aspect()
+std::pair<float, float> FocalLengthHandler::get_Crop_and_Aspect() const
 {
     // 加锁保护数据访问
     std::lock_guard<std::mutex> lock(mtx);

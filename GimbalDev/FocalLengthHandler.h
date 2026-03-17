@@ -28,7 +28,7 @@ private:
 
 public:
     FocalLengthHandler();
-    ~FocalLengthHandler();
+    ~FocalLengthHandler() = default;
 
     /// @brief          设置焦距到对焦电机位置的映射点
     /// @param uiFocal  焦距
@@ -39,7 +39,7 @@ public:
     /// @brief          从对焦电机位置解析焦距
     /// @param uiPos    对焦电机位置，范围 0 ~ 4095
     /// @return         当前位置的焦距，错误时返回负值
-    int get_FocalLen_from_FocusMotorPos(uint16_t uiPos);
+    int get_FocalLen_from_FocusMotorPos(uint16_t uiPos) const;
 
     /// @brief          获取对焦电机校准数据
     /// @return         校准数据点的向量
@@ -47,7 +47,7 @@ public:
 
     /// @brief  Getter of crop ratio and aspect ratio
     /// @return 
-    std::pair<float, float> get_Crop_and_Aspect();
+    std::pair<float, float> get_Crop_and_Aspect() const;
 
     /// @brief Set crop and aspect
     void set_Crop_and_Aspect(float fCrop, float fAspect);
