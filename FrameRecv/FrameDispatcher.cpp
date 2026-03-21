@@ -1,5 +1,8 @@
 #include "FrameDispatcher.h"
 
+#include <exception>
+#include <iostream>
+
 void FrameDispatcher::AddReceiver(std::shared_ptr<IFrameRecv> spReceiver)
 {
     if (!spReceiver)
@@ -99,6 +102,19 @@ void FrameDispatcher::ReceiveFrame(const TFrameRecvFramePtr& spFrame)
 
     for (const auto& spRecv : vecSnapshot)
     {
-        spRecv->ReceiveFrame(spFrame);
+        try
+        {
+            spRecv->ReceiveFrame(spFrame);
+        }
+        catch (const std::exception& ex)
+        {
+            std::cerr << "[FrameDispatcher] receiver threw std::exception: "
+                      << ex.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[FrameDispatcher] receiver threw unknown exception"
+                      << std::endl;
+        }
     }
 }

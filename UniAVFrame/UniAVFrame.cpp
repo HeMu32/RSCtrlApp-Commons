@@ -757,10 +757,21 @@ MemoryView UniAVFrame::originalMemory() const
     return m_originalMemory;
 }
 
+ConstMemoryView UniAVFrame::originalMemoryConst() const
+{
+    return {m_originalMemory.data, m_originalMemory.sizeBytes};
+}
+
 RGBAImageView UniAVFrame::rgbaCacheView() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_rgbaCache;
+}
+
+ConstRGBAImageView UniAVFrame::rgbaCacheViewConst() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return {m_rgbaCache.data, m_rgbaCache.width, m_rgbaCache.height, m_rgbaCache.strideBytes};
 }
 
 std::shared_ptr<const std::uint8_t> UniAVFrame::rgbaCacheRef() const

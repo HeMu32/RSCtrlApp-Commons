@@ -12,6 +12,7 @@ struct PoolBuffer
 {
     std::uint8_t* data = nullptr;
     std::size_t sizeBytes = 0;
+    std::size_t alignmentBytes = 0;
 };
 
 class IUniAVFramePool

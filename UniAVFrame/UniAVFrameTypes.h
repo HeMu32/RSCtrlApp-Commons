@@ -105,9 +105,23 @@ struct MemoryView
     std::size_t sizeBytes = 0;
 };
 
+struct ConstMemoryView
+{
+    const std::uint8_t* data = nullptr;
+    std::size_t sizeBytes = 0;
+};
+
 struct RGBAImageView
 {
     std::uint8_t* data = nullptr;
+    std::int32_t width = 0;
+    std::int32_t height = 0;
+    std::int32_t strideBytes = 0;
+};
+
+struct ConstRGBAImageView
+{
+    const std::uint8_t* data = nullptr;
     std::int32_t width = 0;
     std::int32_t height = 0;
     std::int32_t strideBytes = 0;

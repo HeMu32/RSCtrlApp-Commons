@@ -77,9 +77,20 @@ public:
 	 *       对于 BMDSDK 音频包，`data` 指向包字节内存，生命周期由 UniAVFrame 内部 AddRef/Release 保护。
 	 *       对于 FFmpeg、Qt、OpenCV 后端，`data` 的有效期与 UniAVFrame 生命周期一致。
 	 *       该接口仅提供帧内数据视图，不提供跨音视频流的对齐语义。
+	 *       返回的是可写视图；若仅需只读访问，优先使用 originalMemoryConst()。
 	 */
 	MemoryView originalMemory() const;
+	/**
+	 * @brief 返回原始输入帧的只读内存视图（非拥有指针）。
+	 * @note 不改变既有 `originalMemory()` 接口，仅为只读消费方补充更清晰的 const 边界。
+	 */
+	ConstMemoryView originalMemoryConst() const;
 	RGBAImageView rgbaCacheView() const;
+	/**
+	 * @brief 返回 RGBA 缓存的只读视图。
+	 * @note 不改变既有 `rgbaCacheView()` 接口，仅为只读消费方补充更清晰的 const 边界。
+	 */
+	ConstRGBAImageView rgbaCacheViewConst() const;
 	std::shared_ptr<const std::uint8_t> rgbaCacheRef() const;
 
 	static std::int64_t activeFrameCount();

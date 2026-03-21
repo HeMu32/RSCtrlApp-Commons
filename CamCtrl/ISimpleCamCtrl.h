@@ -42,14 +42,24 @@ public:
 	 * @brief Connect using an externally-provided transport implementation.
 	 *
 	 * Ownership of the @c IPTPTransportPtr is shared; the transport instance
-	 * must remain valid for the lifetime of the connection.
+	 * must remain valid for the lifetime of the control object or until replaced
+	 * by another @c SetPtpTransport() call.
+	 *
+	 * A transport may outlive an active session. Implementations should treat
+	 * @c Disconnect() as "close the active session" rather than "remove the
+	 * transport"; passing @c nullptr here is the explicit way to remove the
+	 * current transport.
 	 * @param transport Shared pointer to an @c IPTPTransport implementation.
 	 * @return true on success.
 	 */
 	virtual bool SetPtpTransport(IPTPTransportPtr transport) = 0;
 
 	/**
-	 * @brief Tear down connection and free resources. Blocking.
+	 * @brief Tear down the active session. Blocking.
+	 *
+	 * This call should close any live protocol/session state but does not imply
+	 * removing an injected transport. To remove the transport itself, call
+	 * @c SetPtpTransport(nullptr).
 	 */
 	virtual void Disconnect() = 0;
 
