@@ -32,6 +32,7 @@ enum class ELiveInputErrorCode : std::uint32_t
 enum class ELiveInputState : std::uint8_t
 {
 	Idle = 0,
+	Opened,
 	Opening,
 	Streaming,
 	Stopping,
@@ -121,14 +122,14 @@ struct TLiveInputCallbacks
  *
  * ### 状态机
  * @code
- *  Idle ──Open()──> Opening ──成功──> Idle
- *                          └─失败──> Idle  (fnOnError 触发)
- *  Idle ──Start()─> Opening ──成功──> Streaming
- *                          └─失败──> Idle  (fnOnError 触发)
- *  Streaming ──Stop()──> Stopping ──> Idle
- *  任意状态 ──发生致命错误──> Error
- *  Error ──Close()──> Idle
- *  任意状态 ──Close()──> Idle
+	 *  Idle ──Open()──> Opening ──成功──> Opened
+	 *                          └─失败──> Idle  (fnOnError 触发)
+	 *  Opened ──Start()─> Opening ──成功──> Streaming
+	 *                            └─失败──> Opened  (fnOnError 触发)
+	 *  Streaming ──Stop()──> Stopping ──> Opened
+	 *  任意状态 ──发生致命错误──> Error
+	 *  Error ──Close()──> Idle
+	 *  任意状态 ──Close()──> Idle
  * @endcode
  *
  * ### 错误码约定
@@ -185,8 +186,8 @@ public:
 	/**
 	 * @brief 注册回调集合。
 	 *
-	 * **前置条件**：State() == Idle。
-	 * **若已处于 Streaming 或 Stopping**：立即返回 false，不修改已注册的回调。
+	 * **前置条件**：State() == Idle 或 State() == Opened。
+	 * **若已处于 Streaming / Opening / Stopping**：立即返回 false，不修改已注册的回调。
 	 * 调用方应在 Open() 之前完成回调注册，以确保 Open() 期间的状态/错误通知
 	 * 能够被正确接收。
 	 *
@@ -198,9 +199,10 @@ public:
 	 * @brief 打开设备，完成参数验证和资源预分配，进入可 Start() 的状态。
 	 *
 	 * **前置条件**：State() == Idle。
-	 * **状态流转**：Idle → Opening → Idle（成功 或 失败后均回 Idle）。
+	 * **状态流转**：Idle → Opening → Opened（成功）
+	 *             或 Idle → Opening → Idle（失败）。
 	 * **错误通知**：失败时触发 fnOnError（若已注册），同时返回对应错误码。
-	 * **成功后**：State() == Idle，可立即调用 Start()。
+	 * **成功后**：State() == Opened，可立即调用 Start()。
 	 * **失败后**：State() == Idle，内部资源已全部清理，可重新调用 Open()。
 	 *
 	 * @return Ok / DeviceBusy / DeviceNotFound / InvalidArgument /
@@ -220,13 +222,13 @@ public:
 	/**
 	 * @brief 启动硬件采集，开始通过 fnOnFrame 分发帧。
 	 *
-	 * **前置条件**：State() == Idle（即已成功调用过 Open()）。
-	 * **状态流转**：Idle → Opening → Streaming（成功）
-	 *             或 Idle → Opening → Idle（失败，fnOnError 触发）。
+	 * **前置条件**：State() == Opened（即已成功调用过 Open()，但尚未 Start()）。
+	 * **状态流转**：Opened → Opening → Streaming（成功）
+	 *             或 Opened → Opening → Opened（失败，fnOnError 触发）。
 	 * **非致命子组件失败**（例如音频启动失败、视频正常）：
 	 *   实现必须通过 fnOnError 通知调用方，但继续进入 Streaming 状态，
 	 *   不得以此为由返回失败或停止视频采集。
-	 * **若 State() != Idle**：立即返回 DeviceBusy，不改变状态。
+	 * **若 State() != Opened**：立即返回 DeviceBusy，不改变状态。
 	 *
 	 * @return Ok / DeviceBusy / BackendFailure / UnsupportedMode / InternalError
 	 */
@@ -236,7 +238,7 @@ public:
 	 * @brief 停止硬件采集，保留已 Open() 的设备资源。
 	 *
 	 * **若 State() 不为 Streaming 或 Opening**：立即返回（空操作）。
-	 * **状态流转**：Streaming → Stopping → Idle。
+	 * **状态流转**：Streaming → Stopping → Opened。
 	 * Stop() 后可再次调用 Start() 而无需重新 Open()。
 	 */
 	virtual void Stop() = 0;

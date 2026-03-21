@@ -50,12 +50,12 @@ struct TGimbalDevCallbacks
 
 | 方法 | 语义 |
 |---|---|
-| `Open(nDevIndex, nCanIndex, callbacks)` | 建立连接，注册回调，成功后状态变为 `Connected` |
+| `Open(nDevIndex, nCanIndex, callbacks)` | 启动异步连接流程并注册回调；真正连通以 `fnStateChanged(Connected)` 为准 |
 | `Close()` | 断开连接，释放资源，幂等 |
 | `IsOpen()` | 连接状态快捷查询 |
 | `GetState()` | 返回完整 `EGimbalDevState` |
 
-`Open()` 返回 `EGimbalDevError`，`Ok` 表示连接成功。不采用纯 bool，原因是失败原因有助于调用方展示诊断信息。
+`Open()` 返回 `EGimbalDevError`，`Ok` 表示连接流程已成功启动，不代表底层已经完成连通；真正连通仍以 `fnStateChanged(Connected)` 为准。不采用纯 bool，原因是失败原因有助于调用方展示诊断信息。
 
 ### 3. 运动指令（fire-and-forget）
 
@@ -91,14 +91,18 @@ void ClearAxisLimits();  // 清除全部限位
 限位裁剪逻辑在实现层的指令发送路径中统一执行，调用方无感知。
 单位统一使用 **0.1°**（与 DJI Ronin SDK 的原生单位一致），避免在接口层做整数/浮点转换。
 
-### 6. FocalLengthHandler 的位置
+### 6. FocalLengthHandler 与统一 facade 的位置
 
-`FocalLengthHandler` **不纳入 `IGimbalDev` 接口**，理由：
-- 并非所有云台实现都具备可程控对焦电机。
-- 焦距映射属于镜头标定数据，与云台运动控制正交，合并在接口中会破坏单一职责原则。
-- 实现类（如 `DJIRoninDev`）可以持有 `FocalLengthHandler` 成员，并在 `CmdSetFocusMotorPos` 中使用其插值结果。
+2026-03-20 设计补充决议：当前系统已明确希望 `IPTZCamObj` 将镜头/跟焦相关能力继续作为统一 facade 的一部分，因此 `IGimbalDev` 中承载与跟焦电机/焦距标定相关的方法在当前设计下被视为可接受的聚合能力面，而不是必须剥离的违规实现细节。
 
-调用方若需读取焦距，通过实现类的扩展方法或单独暴露的 `FocalLengthHandler` 引用获取。
+也就是说，ADR 的原始“完全不纳入 `IGimbalDev`”表述已经与现行架构目标不一致，应以后续接口头为准进行修订。
+
+保留这一能力面的理由改为：
+- 当前上层统一 facade 已要求将跟焦/镜头相关能力与云台控制一并暴露，避免调用方再按实现类型分裂能力访问路径；
+- 现有实现已稳定承载这些方法，强行剥离会引入更大范围的接口破坏；
+- 后续若确实接入不支持此能力的云台实现，可允许实现提供 no-op / 空结果，但接口面保持统一。
+
+这并不否认其在职责上偏向镜头/跟焦域；只是当前架构选择优先保证 facade 一致性，而不是做能力拆分。
 
 ### 7. 位置查询主动触发（QueryPosition）
 

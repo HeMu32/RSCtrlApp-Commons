@@ -46,7 +46,7 @@ public:
 	 * @param transport Shared pointer to an @c IPTPTransport implementation.
 	 * @return true on success.
 	 */
-	bool SetPtpTransport(IPTPTransportPtr transport);
+	virtual bool SetPtpTransport(IPTPTransportPtr transport) = 0;
 
 	/**
 	 * @brief Tear down connection and free resources. Blocking.
