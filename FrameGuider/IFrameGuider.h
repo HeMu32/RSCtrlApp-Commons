@@ -163,6 +163,10 @@ struct TFrameGuiderOpenParams
     std::string sBackendConfig;
     EFrameGuiderMode eMode = EFrameGuiderMode::SingleTarget;
     bool bPreferLatestFrame = true;
+    // Queue-depth semantics are implementation-defined. A value of 0 is allowed
+    // for implementations that support a direct-drop policy: if backend work is
+    // already in flight, ReceiveFrame() may discard the new frame immediately
+    // instead of building additional pending work.
     std::uint32_t uMaxQueueDepth = 2;
 };
 
@@ -200,7 +204,9 @@ struct TFrameGuiderCallbacks
  * 1. `ReceiveFrame()` 应尽快返回，不得在调用线程内执行长耗时推理。
  * 2. 实现若需异步处理，必须持有 `shared_ptr` 副本，不得依赖调用方栈对象。
  * 3. 在 `Idle` / `Error` 状态下收到帧时，实现应做防御性 no-op，不得崩溃。
- * 4. 若内部队列已满，实现可丢弃旧帧或新帧，但应更新统计并按实现策略通知。
+ * 4. 若内部队列已满，实现可丢弃旧帧或新帧；某些实现也可选择 0 深度兼容
+ *    模式，在后端忙碌时直接丢弃新帧。无论采用哪种策略，都应更新统计并按
+ *    实现策略通知。
  *
  * ## 云台依赖
  * - 实现可选择使用 `GimbalDev::IGimbalDev` 进行 PTZ 控制。
