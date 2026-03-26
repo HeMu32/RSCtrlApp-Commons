@@ -58,7 +58,7 @@ enum class EFrameGuiderMode : std::uint8_t
  * preserve the raw tracking geometry instead of forcibly clipping to the image
  * rectangle.
  */
-struct TFrameGuiderTrackBox
+struct TFrameGuiderObjectPartBox
 {
     float fX1 = 0.0F;
     float fY1 = 0.0F;
@@ -75,7 +75,56 @@ struct TFrameGuiderTrackBox
 };
 
 /**
+ * @brief Describe one tracked object and the contiguous part-box range that
+ * belongs to it inside `TFrameGuiderResult::vParts`.
+ *
+ * This expresses the logical structure:
+ *
+ *   Container[i][p]
+ *
+ * where:
+ * - `i` is the tracked-object index in `vObjects`
+ * - `p` is the part index within that object, resolved by:
+ *   `vParts[nPartOffset + p]`
+ *
+ * Part-index semantics are implementation-defined rather than globally fixed.
+ * Callers MUST consult the concrete guider implementation documentation before
+ * interpreting `p`.
+ *
+ * Example for the current `basetrk` design intent:
+ * - `p = 0`: detection box
+ * - `p = 1`: head indication box
+ * - `p = 2`: body indication box
+ *
+ * Other guider implementations may legally use a different mapping.
+ */
+struct TFrameGuiderObjectPartsSpan
+{
+    std::int32_t nObjectIndex = -1;
+    std::int32_t nPartOffset = 0;
+    std::int32_t nPartCount = 0;
+    std::int32_t nTrackId = -1;
+    std::uint32_t uFlags = 0;
+};
+
+/**
  * @brief Per-frame guider output context.
+ *
+ * Result data is stored as two coordinated arrays:
+ * - `vObjects`: object-level spans / metadata
+ * - `vParts`: flat storage of all part boxes for the frame
+ *
+ * To iterate one object's boxes:
+ *
+ * ```cpp
+ * const auto& obj = vObjects[i];
+ * for (int p = 0; p < obj.nPartCount; ++p) {
+ *     const auto& box = vParts[obj.nPartOffset + p];
+ * }
+ * ```
+ *
+ * The meaning of each `p` is defined by the concrete `IFrameGuider`
+ * implementation, not by this shared interface alone.
  */
 struct TFrameGuiderResult
 {
@@ -85,7 +134,8 @@ struct TFrameGuiderResult
     std::int64_t nSequence = 0;
     EFrameGuiderMode eMode = EFrameGuiderMode::SingleTarget;
     bool bDroppedEarlierFrames = false;
-    std::vector<TFrameGuiderTrackBox> vTracks;
+    std::vector<TFrameGuiderObjectPartsSpan> vObjects;
+    std::vector<TFrameGuiderObjectPartBox> vParts;
 };
 
 /**
