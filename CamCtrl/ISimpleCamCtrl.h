@@ -26,6 +26,7 @@ public:
 		double f_number = 0.0;		 /**< Aperture value (e.g. 2.8 for F2.8) */
 		std::uint32_t iso = 0;			 /**< Raw PTP value for ISO */
 		std::int32_t exposure_comp = 0;	 /**< Raw PTP value for exposure compensation */
+		double focal_length = 0.0; /**< Lens focal length in millimeters */	
 	};
 
 	virtual ~ISimpleCamCtrl() = default;
@@ -76,10 +77,11 @@ public:
 	 * Implementations should refresh their internal snapshot so subsequent
 	 * getters return up-to-date values.
 	 *
-	 * @note Exposure parameters are cache-based and are not refreshed
-	 *       automatically in background. Callers must call UpdateStatus()
-	 *       explicitly before reading exposure getters when fresh values are
-	 *       required.
+	 * @note Implementations MAY perform auto-refresh in background (e.g. a
+	 * polling worker). In that case callers can use getters directly as the
+	 * cache is continuously updated. If the implementation does not do
+	 * auto-refresh, callers should call UpdateStatus() explicitly when
+	 * fresh values are required.
 	 * @return true on success.
 	 */
 	virtual bool UpdateStatus() = 0;
