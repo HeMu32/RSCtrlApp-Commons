@@ -51,6 +51,53 @@ enum class EFrameGuiderMode : std::uint8_t
 };
 
 /**
+ * @brief Unified joystick value used for both caller input and guider output.
+ *
+ * The value range of each axis is normalized to `[-15000, 15000]`.
+ * This numeric convention is intentionally aligned with DJI R SDK joystick
+ * semantics so caller, guider, and gimbal-control layers can share a stable
+ * boundary.
+ *
+ * `uFlags` is reserved for state/source/validity bits defined by the concrete
+ * guider contract.
+ * `nTimestamp` records when this value was last updated, using the current
+ * guider instance's internal clock reference. It is filled by
+ * `updateJoystickStat(...)` when the cached state is updated. This field is not
+ * intended to replace the implementation's internal monotonic clock logic for
+ * cache-expiry checks, even if both use the same underlying clock reference.
+ */
+struct TFrameGuiderJoystickValue
+{
+    std::int16_t nX = 0;
+    std::int16_t nY = 0;
+    std::uint32_t uFlags = 0;
+    std::int64_t nTimestamp = 0;
+};
+
+/**
+ * @brief Latest cached FoV state associated with the current capture/view path.
+ * Unit: tangent of half FoV angle.
+ *
+ * `fTanHalfFovH` and `fTanHalfFovV` express the horizontal and vertical half-
+ * FoV tangent values used by tracking / guidance logic.
+ *
+ * Unlike joystick state, FoV state does not use timeout-to-zero semantics in
+ * the current design. Implementations cache and return the latest written value
+ * until it is explicitly replaced.
+ *
+ * `nTimestamp` records when this FoV state was last updated, using the current
+ * guider instance's internal clock reference. It is filled by
+ * `updateFovStat(...)`.
+ */
+struct TFrameGuiderFovStat
+{
+    float fTanHalfFovH = 0.0F;
+    float fTanHalfFovV = 0.0F;
+    std::uint32_t uFlags = 0;
+    std::int64_t nTimestamp = 0;
+};
+
+/**
  * @brief Tracker/guider output box in oriented-rectangle form.
  *
  * Coordinates are expressed in the original input-frame coordinate space.
@@ -110,6 +157,10 @@ struct TFrameGuiderObjectPartsSpan
 /**
  * @brief Per-frame guider output context.
  *
+ * This result object is intended to carry both:
+ * - tracking geometry results
+ * - joystick guidance output for downstream PTZ/gimbal control
+ *
  * Result data is stored as two coordinated arrays:
  * - `vObjects`: object-level spans / metadata
  * - `vParts`: flat storage of all part boxes for the frame
@@ -125,6 +176,11 @@ struct TFrameGuiderObjectPartsSpan
  *
  * The meaning of each `p` is defined by the concrete `IFrameGuider`
  * implementation, not by this shared interface alone.
+ *
+ * Joystick guidance fields, when present in concrete implementations, should
+ * use the normalized range `[-15000, 15000]`. This numeric convention is
+ * intentionally aligned with DJI R SDK joystick semantics so caller, guider,
+ * and gimbal-control layers can share a stable value range.
  */
 struct TFrameGuiderResult
 {
@@ -134,6 +190,8 @@ struct TFrameGuiderResult
     std::int64_t nSequence = 0;
     EFrameGuiderMode eMode = EFrameGuiderMode::SingleTarget;
     bool bDroppedEarlierFrames = false;
+    bool bHasJoystickGuide = false;
+    TFrameGuiderJoystickValue stJoystickGuide;
     std::vector<TFrameGuiderObjectPartsSpan> vObjects;
     std::vector<TFrameGuiderObjectPartBox> vParts;
 };
@@ -173,6 +231,11 @@ struct TFrameGuiderOpenParams
 /**
  * @brief Unified frame-guider callback collection.
  *
+ * `fnOnResult` is the primary asynchronous output path for guider results.
+ * Callers are expected to register callbacks before `Open()`. The result
+ * payload is intended to carry both tracking boxes and joystick-guidance
+ * information for the same guider context.
+ *
  * @note Callbacks may be triggered on internal worker threads. Callers are
  *       responsible for thread-safe marshaling to UI or control threads.
  */
@@ -200,6 +263,9 @@ struct TFrameGuiderCallbacks
  * 推荐调用顺序：
  * `SetCallbacks()` -> `SetGimbalDev()`(optional) -> `Open()` -> `ReceiveFrame()` x N -> `Close()`。
  *
+ * 当前约定中，caller 应在 `Open()` 前设置 callbacks，尤其是 `fnOnResult`。
+ * guider 的主结果语义通过 callback 异步输出，而不是依赖额外轮询接口。
+ *
  * ## 帧接收契约（继承自 IFrameRecv）
  * 1. `ReceiveFrame()` 应尽快返回，不得在调用线程内执行长耗时推理。
  * 2. 实现若需异步处理，必须持有 `shared_ptr` 副本，不得依赖调用方栈对象。
@@ -215,6 +281,21 @@ struct TFrameGuiderCallbacks
  * ## 结果坐标语义
  * - 输出框允许超出当前输入帧边界。
  * - 若上层需要显示裁剪、OSD 限幅或屏幕内绘制，应在消费侧自行裁剪。
+ *
+ * ## 摇杆数值语义
+ * - guider 输入侧的 joystick state，以及 guider 输出侧的 joystick guidance，
+ *   都应使用统一归一化区间 `[-15000, 15000]`。
+ * - 这一数值约定取自 DJI R SDK 当前常用的 joystick 数值语义。
+ * - `0` 表示该轴当前无输入或无导引；正负号表示相反方向。
+ * - joystick 输入按上层控制链路的推送频率更新，不要求与视频帧率一致。
+ * - guider 每次向 tracking 链路提交一帧时，都应同步采样当前缓存 joystick
+ *   state，并将其作为这次 tracking 请求的附加上下文一并传下去。
+ *   当前 tracker 实现可以忽略该输入，但 guider 不应省略这一步传递。
+ * - FoV state 建议按逐帧视频节奏更新（或尽可能接近逐帧），以降低 zoom/
+ *   视角变化时的帧级失配。
+ * - guider 还应独立缓存当前 `TFrameGuiderFovStat`，并在每次向 tracking 链路
+ *   提交一帧时同步采样该 FoV 状态。FoV 与 joystick 是独立输入流，不共享
+ *   更新节奏或超时语义。
  */
 class IFrameGuider : public IFrameRecv
 {
@@ -225,7 +306,9 @@ public:
      * @brief Register callback collection.
      *
      * Recommended to call before `Open()`. Implementations should atomically
-     * replace the full callback set.
+     * replace the full callback set. The primary result callback `fnOnResult`
+     * is the standard output path for both tracking boxes and joystick-guidance
+     * output; implementations may reject `Open()` when it is not provided.
      *
      * @return true Success.
      * @return false Current state does not allow callback rebinding.
@@ -240,6 +323,50 @@ public:
      *                 implementation chooses otherwise.
      */
     virtual void SetGimbalDev(const std::shared_ptr<GimbalDev::IGimbalDev>& spGimbal) = 0;
+
+    /**
+     * @brief Update the latest caller-side joystick input state.
+     *
+     * Implementations should cache only the newest value, overwrite
+     * `stValue.nTimestamp` with the update time measured against the current
+     * instance's internal clock reference, and clamp each axis into the
+     * normalized range `[-15000, 15000]`.
+     *
+     * Expected cadence: caller-driven control push frequency (independent from
+     * video frame rate).
+     */
+    virtual void updateJoystickStat(const TFrameGuiderJoystickValue& stValue) = 0;
+
+    /**
+     * @brief Get the current effective joystick input state.
+     *
+     * Implementations may return a zeroed value when no fresh cached value is
+     * available, for example after timeout expiry. The returned `nTimestamp`
+     * represents the cached state's last update time under the instance-local
+     * clock reference, or an implementation-defined empty value such as `0`.
+     */
+    virtual TFrameGuiderJoystickValue getJoystickStat() const = 0;
+
+    /**
+     * @brief Update the latest caller-side FoV state.
+     *
+     * Implementations should cache only the newest value and overwrite
+     * `stStat.nTimestamp` with the update time measured against the current
+     * instance's internal clock reference.
+     *
+     * Expected cadence: preferably per-frame (or as close as practical),
+     * because FoV is a frame-associated optical context.
+     */
+    virtual void updateFovStat(const TFrameGuiderFovStat& stStat) = 0;
+
+    /**
+     * @brief Get the latest cached FoV state.
+     *
+     * Unlike joystick state, FoV state is not required to expire to zero in the
+     * current design. Implementations should return the latest cached value, or
+     * an implementation-defined zero/default value if none has ever been set.
+     */
+    virtual TFrameGuiderFovStat getFovStat() const = 0;
 
     /**
      * @brief Open guider runtime with backend-defined configuration.
