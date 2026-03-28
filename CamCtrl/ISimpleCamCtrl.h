@@ -12,7 +12,6 @@
  * operations and a small, numeric status snapshot. Designed to be used from
  * single-threaded callers or protected externally by the caller.
  * 
- * @todo add device friendly name string getter.
  */
 class ISimpleCamCtrl
 {
@@ -69,6 +68,14 @@ public:
 	 * @return true if connected and ready to use.
 	 */
 	virtual bool IsConnected() const = 0;
+
+	/**
+	 * @brief Get a user-facing device name if available.
+	 *
+	 * Implementations may return an empty string when no friendly name is
+	 * available from the backend.
+	 */
+	virtual std::string GetFriendlyName() const { return std::string(); }
 	/** @} */
 
 	/**
