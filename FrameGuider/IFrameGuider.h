@@ -1,7 +1,10 @@
 // Heavy header.
 // Frame guider consumes UniAVFrame objects and produces guidance / tracking outputs
-// for PTZ composition control. Inherits IFrameRecv and may hold a reference to a
-// GimbalDev::IGimbalDev implementation.
+// for PTZ composition control. Inherits IFrameRecv.
+//
+// Boundary rule (must-not): IFrameGuider implementations must not hold or bind
+// GimbalDev::IGimbalDev directly. Any gimbal command execution belongs to
+// IPTZCamObj implementations that consume guider outputs.
 #pragma once
 
 #include <cstdint>
@@ -11,7 +14,6 @@
 #include <vector>
 
 #include "../FrameRecv/IFrameRecv.h"
-#include "../GimbalDev/IGimbalDev.h"
 
 /**
  * @brief Frame guider unified error code.
@@ -261,7 +263,7 @@ struct TFrameGuiderCallbacks
  *
  * ## 生命周期
  * 推荐调用顺序：
- * `SetCallbacks()` -> `SetGimbalDev()`(optional) -> `Open()` -> `ReceiveFrame()` x N -> `Close()`。
+ * `SetCallbacks()` -> `Open()` -> `ReceiveFrame()` x N -> `Close()`。
  *
  * 当前约定中，caller 应在 `Open()` 前设置 callbacks，尤其是 `fnOnResult`。
  * guider 的主结果语义通过 callback 异步输出，而不是依赖额外轮询接口。
@@ -274,9 +276,9 @@ struct TFrameGuiderCallbacks
  *    模式，在后端忙碌时直接丢弃新帧。无论采用哪种策略，都应更新统计并按
  *    实现策略通知。
  *
- * ## 云台依赖
- * - 实现可选择使用 `GimbalDev::IGimbalDev` 进行 PTZ 控制。
- * - 也允许工作在 ObserveOnly 模式，仅输出追踪结果而不发送控制指令。
+ * ## 云台控制边界
+ * - `IFrameGuider` 只输出 tracking/guidance 结果，不直接执行云台命令。
+ * - 云台命令执行必须在 `IPTZCamObj` 实现层完成，以保持装配与生命周期边界清晰。
  *
  * ## 结果坐标语义
  * - 输出框允许超出当前输入帧边界。
@@ -314,15 +316,6 @@ public:
      * @return false Current state does not allow callback rebinding.
      */
     virtual bool SetCallbacks(const TFrameGuiderCallbacks& stCallbacks) = 0;
-
-    /**
-     * @brief Bind or replace the target gimbal device.
-     *
-     * @param spGimbal Nullable. Passing `nullptr` detaches current gimbal and
-     *                 leaves guider in observe-only output mode unless the
-     *                 implementation chooses otherwise.
-     */
-    virtual void SetGimbalDev(const std::shared_ptr<GimbalDev::IGimbalDev>& spGimbal) = 0;
 
     /**
      * @brief Update the latest caller-side joystick input state.

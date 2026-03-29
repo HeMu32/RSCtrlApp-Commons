@@ -37,7 +37,7 @@ This repository is a *small common library* used by the larger `RSCtrlApp` proje
 
 - Use integer types from `<cstdint>` everywhere in interfaces.
 
-- Interfaces may inherit from others; e.g. `IFrameGuider` inherits from `IFrameRecv` and is expected to hold a reference to an `IGimbalDev`.  This dependency is only documented in the header comment.
+- Interfaces may inherit from others; e.g. `IFrameGuider` inherits from `IFrameRecv` but must not hold/bind `IGimbalDev` directly. Gimbal command execution belongs to upper PTZ aggregation/consumer layers.
 
 - No unit tests or CI in this repo – tests are located in the parent project if any.  Do not add a test harness here unless requested by the higher‑level repo.
 
