@@ -260,6 +260,17 @@ public:
      */
     virtual void CmdFocusMotorMoveRel(int16_t nSpeed) = 0;
 
+    /**
+     * @brief   Try to read the implementation-cached focus motor position.
+     * @param   uiPos  [out] cached focus motor position in [0, 4095].
+     * @return  true when a meaningful cached value is available.
+     *
+     * @note    This query is exposed only to support focal-length estimation
+     *          from focus-motor calibration data at the PTZ aggregation layer.
+     *          It is not intended as a generic motion-control/status contract.
+     */
+    virtual bool TryGetFocusMotorPos(uint16_t& /*uiPos*/) const { return false; }
+
 
     // --------------------------------------------------------
     //  角度限位配置
