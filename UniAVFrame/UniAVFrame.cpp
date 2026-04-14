@@ -323,6 +323,21 @@ static bool convertByFFmpegSws(
         return false;
     }
 
+    struct TSwsThreadCache
+    {
+        SwsContext* pCtx = nullptr;
+        ~TSwsThreadCache()
+        {
+            if (pCtx != nullptr)
+            {
+                sws_freeContext(pCtx);
+                pCtx = nullptr;
+            }
+        }
+    };
+
+    static thread_local TSwsThreadCache stTlsSws;
+
     AVFrame stSrcFrame;
     std::memset(&stSrcFrame, 0, sizeof(stSrcFrame));
     stSrcFrame.format = static_cast<int>(emSrcFmt);
@@ -339,7 +354,8 @@ static bool convertByFFmpegSws(
     stDstFrame.data[0] = pDst;
     stDstFrame.linesize[0] = iDstStride;
 
-    SwsContext* pSws = sws_getContext(
+    stTlsSws.pCtx = sws_getCachedContext(
+        stTlsSws.pCtx,
         iWidth,
         iHeight,
         emSrcFmt,
@@ -351,21 +367,19 @@ static bool convertByFFmpegSws(
         nullptr,
         nullptr);
 
-    if (pSws == nullptr)
+    if (stTlsSws.pCtx == nullptr)
     {
         return false;
     }
 
     const int iScaled = sws_scale(
-        pSws,
+        stTlsSws.pCtx,
         stSrcFrame.data,
         &stSrcFrame.linesize[0],
         0,
         iHeight,
         stDstFrame.data,
         &stDstFrame.linesize[0]);
-
-    sws_freeContext(pSws);
     return (iScaled == iHeight);
 }
 
