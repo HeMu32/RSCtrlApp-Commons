@@ -1,7 +1,18 @@
 #include "FrameDispatcher.h"
 
+#include <chrono>
 #include <exception>
 #include <iostream>
+#include <typeinfo>
+
+namespace
+{
+#if defined(_DEBUG) && defined(_DEBUG_PERF)
+constexpr std::uint64_t kFrameDispatcherWarnUs = 4000;
+constexpr std::uint64_t kFrameDispatcherPeriodicN = 300;
+std::atomic<std::uint64_t> g_nFrameDispatchCount{0};
+#endif
+}
 
 void FrameDispatcher::AddReceiver(std::shared_ptr<IFrameRecv> spReceiver)
 {
@@ -100,8 +111,10 @@ void FrameDispatcher::ReceiveFrame(const TFrameRecvFramePtr& spFrame)
             m_vecReceivers.end());
     }
 
+    const auto tpDispatchBegin = std::chrono::steady_clock::now();
     for (const auto& spRecv : vecSnapshot)
     {
+        const auto tpRecvBegin = std::chrono::steady_clock::now();
         try
         {
             spRecv->ReceiveFrame(spFrame);
@@ -116,5 +129,33 @@ void FrameDispatcher::ReceiveFrame(const TFrameRecvFramePtr& spFrame)
             std::cerr << "[FrameDispatcher] receiver threw unknown exception"
                       << std::endl;
         }
+
+#if defined(_DEBUG) && defined(_DEBUG_PERF)
+        const auto nRecvUs = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - tpRecvBegin).count();
+        if (nRecvUs >= static_cast<long long>(kFrameDispatcherWarnUs))
+        {
+            std::cerr << "[Perf][FrameDispatcher] slow receiver"
+                      << " ptr=" << spRecv.get()
+                      << " type=" << typeid(*spRecv).name()
+                      << " us=" << nRecvUs
+                      << " recvCount=" << vecSnapshot.size()
+                      << std::endl;
+        }
+#endif
     }
+
+#if defined(_DEBUG) && defined(_DEBUG_PERF)
+    const auto nDispatchUs = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - tpDispatchBegin).count();
+    const std::uint64_t nCount = g_nFrameDispatchCount.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (nDispatchUs >= static_cast<long long>(kFrameDispatcherWarnUs) || (nCount % kFrameDispatcherPeriodicN) == 0)
+    {
+        std::cerr << "[Perf][FrameDispatcher] dispatch"
+                  << " count=" << nCount
+                  << " receivers=" << vecSnapshot.size()
+                  << " us=" << nDispatchUs
+                  << std::endl;
+    }
+#endif
 }
