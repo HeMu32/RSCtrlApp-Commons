@@ -20,8 +20,8 @@ private:
     // 用于映射焦距和电机位置的数据点
     std::vector<std::pair<int16_t, int16_t>> vecMotorCalPoints;
 
-    float fCropRatio    = 1.1;      // Full frame 16:9
-    float fAspetRatio   = 1.778;    // Full frame 16:9
+    float fCropRatio    = 1.0F;     // Full frame 3:2
+    float fAspetRatio   = 1.5F;     // Full frame 3:2
     
     // 添加互斥锁用于线程安全
     mutable std::mutex mtx;

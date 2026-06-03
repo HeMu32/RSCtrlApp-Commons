@@ -156,6 +156,35 @@ struct TFrameGuiderObjectPartsSpan
     std::uint32_t uFlags = 0;
 };
 
+struct TFrameGuiderMoveToCommand
+{
+    std::int16_t nYaw = 0;
+    std::int16_t nRoll = 0;
+    std::int16_t nPitch = 0;
+    std::uint32_t nTimeMs = 0;
+};
+
+struct TFrameGuiderZoomCommand
+{
+    std::int16_t nSpeed = 0;
+};
+
+struct TFrameGuiderFNoCommand
+{
+    float fFNo = 0.0F;
+};
+
+struct TFrameGuiderShutterCommand
+{
+    bool bTrigger = false;
+};
+
+struct TFrameGuiderAfPointCommand
+{
+    float fNormX = 0.0F;
+    float fNormY = 0.0F;
+};
+
 /**
  * @brief Per-frame guider output context.
  *
@@ -194,6 +223,22 @@ struct TFrameGuiderResult
     bool bDroppedEarlierFrames = false;
     bool bHasJoystickGuide = false;
     TFrameGuiderJoystickValue stJoystickGuide;
+
+    bool bReqMoveTo = false;
+    TFrameGuiderMoveToCommand stMoveTo;
+
+    bool bReqZoom = false;
+    TFrameGuiderZoomCommand stZoomSpd;
+
+    bool bReqFNo = false;
+    TFrameGuiderFNoCommand stFNo;
+
+    bool bReqShutter = false;
+    TFrameGuiderShutterCommand stShutter;
+
+    bool bReqAfPoint = false;
+    TFrameGuiderAfPointCommand stAfPoint;
+
     std::vector<TFrameGuiderObjectPartsSpan> vObjects;
     std::vector<TFrameGuiderObjectPartBox> vParts;
 };
@@ -360,6 +405,16 @@ public:
      * an implementation-defined zero/default value if none has ever been set.
      */
     virtual TFrameGuiderFovStat getFovStat() const = 0;
+
+    virtual void updateZoomStat(std::uint8_t nZoomPercent) { (void)nZoomPercent; }
+
+    virtual void updateIrisStat(float fFNo) { (void)fFNo; }
+
+    virtual void updateOrientationStat(
+        std::int16_t nYaw, std::int16_t nRoll, std::int16_t nPitch)
+    {
+        (void)nYaw; (void)nRoll; (void)nPitch;
+    }
 
     /**
      * @brief Open guider runtime with backend-defined configuration.

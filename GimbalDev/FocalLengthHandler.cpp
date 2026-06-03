@@ -178,8 +178,8 @@ void FocalLengthHandler::clear_FocusMotorCalData()
     // 加锁保护数据访问
     std::lock_guard<std::mutex> lock(mtx);
     vecMotorCalPoints.clear();
-    this->fCropRatio    = 1.1;      // Reset to full frame 16:9
-    this->fAspetRatio   = 1.778;    // Reset to full frame 16:9
+    this->fCropRatio    = 1.0F;     // Full frame 3:2
+    this->fAspetRatio   = 1.5F;     // Full frame 3:2
 }
 
 // 新增方法：保存校准数据到文件
