@@ -44,6 +44,8 @@ enum class EFrameGuiderState : std::uint8_t
 
 /**
  * @brief Frame guider work mode.
+ * 
+ * @note Mode ObserveOnly was used for temporary stopping the algorithm sometimes
  */
 enum class EFrameGuiderMode : std::uint8_t
 {
@@ -238,6 +240,9 @@ struct TFrameGuiderResult
 
     bool bReqAfPoint = false;
     TFrameGuiderAfPointCommand stAfPoint;
+
+    bool bReqShutterRelease = false;
+    bool bReqFocusEnd = false;
 
     std::vector<TFrameGuiderObjectPartsSpan> vObjects;
     std::vector<TFrameGuiderObjectPartBox> vParts;
