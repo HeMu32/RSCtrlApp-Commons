@@ -239,13 +239,26 @@ public:
 	 */
 	virtual bool SetExposureParams(const ExposureParams &params) = 0;
 
+	enum EExposureField : std::uint8_t
+	{
+		kExpField_ShutterSpeed = 0x01,
+		kExpField_FNumber      = 0x02,
+		kExpField_ISO          = 0x04,
+		kExpField_ExpComp      = 0x08,
+		kExpField_All          = 0x0F,
+	};
+
+	virtual bool SetExposureParamsMasked(const ExposureParams &params, std::uint8_t field_mask) = 0;
+
 	/** @name Movie Recording (blocking) */
 	/** @{ */
     /**
-     * @brief Movie recording state accessor.
-     * @return true if the device is currently recording video.
-     */
+	 * @brief Movie recording state accessor.
+	 * @return true if the device is currently recording video.
+	 */
     virtual bool IsMovieRecording() const = 0;
+
+	virtual std::uint16_t GetStillImageSaveDestination() const { return 0; }
 
     /** @} */
 };
