@@ -242,6 +242,7 @@ struct TFrameGuiderResult
     TFrameGuiderAfPointCommand stAfPoint;
 
     bool bReqShutterRelease = false;
+    bool bReqFocusStart = false;
     bool bReqFocusEnd = false;
 
     std::vector<TFrameGuiderObjectPartsSpan> vObjects;
