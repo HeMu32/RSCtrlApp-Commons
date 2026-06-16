@@ -244,6 +244,8 @@ struct TFrameGuiderResult
     bool bReqShutterRelease = false;
     bool bReqFocusStart = false;
     bool bReqFocusEnd = false;
+    bool bReqFocusReset = false;
+    double fFocusResetDistance = 0.0;
 
     std::vector<TFrameGuiderObjectPartsSpan> vObjects;
     std::vector<TFrameGuiderObjectPartBox> vParts;

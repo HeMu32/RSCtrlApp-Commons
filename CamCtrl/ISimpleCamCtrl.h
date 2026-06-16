@@ -250,6 +250,13 @@ public:
 
 	virtual bool SetExposureParamsMasked(const ExposureParams &params, std::uint8_t field_mask) = 0;
 
+	/**
+	 * @brief Set focus distance by switching to MF, writing distance, then back to AF-S.
+	 * @param meters Desired focal distance in meters (> 0).
+	 * @return true on success.
+	 */
+	virtual bool SetFocusDistanceBestEffort(double meters) = 0;
+
 	/** @name Movie Recording (blocking) */
 	/** @{ */
     /**
