@@ -211,9 +211,10 @@ public:
 
 	/**
 	 * @brief Focus (half-press) control.
+	 * @param bUseTracking When true, also activates Tracking On + AF On (0xD30D).
 	 * @return true on success.
 	 */
-	virtual bool FocusStart() = 0;
+	virtual bool FocusStart(bool bUseTracking = false) = 0;
 	virtual bool FocusEnd() = 0;
 
 	/**
